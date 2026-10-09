@@ -15,6 +15,7 @@
   </nav>
   <button id="bothbtn" class="tb" title="Both side by side (Ctrl+3)" aria-label="Both side by side">◫</button>
   <span id="clockline"></span>
+  <button id="updbtn" class="tb upd" hidden title="A new version is ready">Update</button>
   <span id="links" aria-label="Quick links"></span>
 </header>
 
@@ -93,11 +94,17 @@
 
       <section class="sec" id="s-theme">
         <h2>Theme studio</h2>
+        <div class="mini" id="mini" aria-label="Preview"></div>
         <div class="card nowcard"><div><b>Now</b><div id="theme-now" class="dim"></div></div><div class="row tight"><input id="theme-name" placeholder="Name it" maxlength="30"><button id="theme-save">Save as my theme</button><button id="theme-reset" title="Back to your Fluxer theme only">Start over</button></div></div>
         <h3 class="sub">Templates <label class="keep"><input type="checkbox" id="keep-colors"> Keep my colors</label></h3>
         <div id="templates" class="templates"></div>
         <h3 class="sub">Mix your own</h3>
         <div id="pieces" class="pieces"></div>
+      </section>
+
+      <section class="sec" id="s-app">
+        <h2>App</h2>
+        <div class="card appcard"><label class="keep"><input type="checkbox" id="opt-tray"> Keep running in the tray when I close it</label><span class="dim small" id="app-ver"></span><button id="upd-check">Check for updates</button><span class="dim small" id="upd-msg"></span></div>
       </section>
 
       <section class="sec" id="s-links">

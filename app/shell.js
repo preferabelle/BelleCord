@@ -81,7 +81,10 @@
     await R.press(curSide(), "dm", "@me");
     dmMode = true;
   };
-  addEventListener("keydown", (e) => { if (e.ctrlKey && !e.altKey && !e.shiftKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); keyMode(Number(e.key)); } if (e.key === "Escape") { $("addmenu").hidden = true; $("gcard").hidden = true; } });
+  const MAC = (window.bcApp && window.bcApp.platform) === "darwin";
+  document.body.classList.add(MAC ? "mac" : (window.bcApp && window.bcApp.platform) === "linux" ? "linux" : "win");
+  if (MAC) document.querySelectorAll("[title*='Ctrl+']").forEach((el) => (el.title = el.title.replace(/Ctrl\+/g, "⌘")));
+  addEventListener("keydown", (e) => { if ((MAC ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); keyMode(Number(e.key)); } if (e.key === "Escape") { $("addmenu").hidden = true; $("gcard").hidden = true; } });
   function keyMode(n) { setMode(MODES[n - 1]); } // (Ctrl+1 to Ctrl+4 go straight there)
   host.onSwitch((n) => keyMode(n));
   document.querySelectorAll(".layoutsw [data-rail]").forEach((b) => (b.onclick = () => { document.body.dataset.rail = b.dataset.rail; save({ rail: b.dataset.rail }); }));
@@ -437,12 +440,34 @@
     await save({ theme: next });
     applyAll(); paintStudio();
   }
+  // ---- the mini app: how a theme looks before (and after) you pick it ----
+  let miniWall = null;
+  function mini(stack) {
+    const t = T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(curSide()).color) });
+    const r = (T.CORNERS[stack.corners] || {}).r ?? 8, F = T.FONTS[stack.font], fx = new Set(stack.effects || []);
+    const px = (T.SIZES[stack.size] || {}).px || 15, gap = (T.SPACING[stack.spacing] || {}).px ?? 14;
+    const L = T.bgLayer(stack, t, { wall: miniWall, strength: P("wStr"), blur: P("wBlur") });
+    const glass = L && fx.has("glass");
+    const panel = glass ? "color-mix(in srgb," + t.panel + " 62%,transparent)" : t.panel, chat = glass || L ? "color-mix(in srgb," + t.chat + " " + (glass ? 50 : 100) + "%,transparent)" : t.chat;
+    const vars = "--mf:" + t.frame + ";--mp:" + panel + ";--mc:" + chat + ";--mr:" + t.raised + ";--mi:" + t.input + ";--mt:" + t.text + ";--ms:" + t.strong + ";--mm:" + t.muted + ";--ma:" + t.accent + ";--msel:" + t.selected + ";--mline:" + t.line + ";--mrad:" + r + "px;--mfs:" + px + "px;--mgap:" + gap + "px;" + (F && F.stack ? "--mfont:" + F.stack + ";" : "");
+    const bg = L ? '<div class="mbg' + (glass ? " all" : "") + '" style="' + esc(T.bgDecl(L)) + '"></div>' : "";
+    const msg = (name, color, text, mention) => '<div class="mm' + (fx.has("bubbles") ? " bub" : "") + (mention ? " men" : "") + '"><i style="background:' + color + '"></i><div><b style="color:' + color + '">' + name + "</b><span>" + text + "</span></div></div>";
+    return '<div class="mapp' + (fx.has("glow") ? " glow" : "") + (fx.has("shadows") ? " shad" : "") + (fx.has("scanlines") ? " scan" : "") + '" style="' + esc(vars) + '">' + (glass ? bg : "") +
+      '<div class="mrail"><i class="d"></i><i></i><i></i><i></i></div><div class="mside"><b>THE FELLAS</b><p class="sel"># general</p><p># memes</p><p>🔊 Gaming</p></div>' +
+      '<div class="mchat">' + (glass ? "" : bg) + '<div class="mhead"># general</div><div class="mmsgs">' + msg("Pear", "#5aa469", "are you coming to game night?", true) + msg("Mythbell", "#4a6cd4", "bro i knew it") + msg("Kiwi", "#c75b9b", "look at this cat") + '</div><div class="mbox">Message #general</div></div>' +
+      '<div class="mmem"><p>ONLINE</p><p><i style="background:#5aa469"></i>Pear</p><p><i style="background:#4a6cd4"></i>Mythbell</p><p><i style="background:#c75b9b"></i>Kiwi</p></div></div>';
+  }
+  function showMini(stack) { setHtml($("mini"), mini(stack || P("theme"))); }
   function paintStudio() {
     const stack = P("theme");
+    showMini(stack);
+    ctxFor(curSide()).then((x) => { if (x.wall !== miniWall) { miniWall = x.wall; showMini(); } });
     $("theme-now").textContent = themeNow();
     const mine = (P("myThemes") || []).map((m) => ({ id: "my:" + m.id, name: m.name, blurb: "Yours", pieces: m.pieces, mine: m.id }));
     const all = [...mine, ...T.TEMPLATES];
     setHtml($("templates"), all.map((tp, i) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join(""));
+    const asPicked = (tp) => { const p = { ...tp.pieces, effects: [...(tp.pieces.effects || [])] }; if (P("keepColors") && !tp.mine) p.palette = P("theme").palette; return { ...P("theme"), ...p }; };
+    $("templates").querySelectorAll(".tpl").forEach((b) => { b.onmouseenter = () => showMini(asPicked(all[Number(b.dataset.i)])); b.onmouseleave = () => showMini(); });
     $("templates").querySelectorAll(".tpl").forEach((b) => (b.onclick = async (e) => {
       const del = e.target.closest("[data-del]");
       if (del) { e.stopPropagation(); await save({ myThemes: P("myThemes").filter((m) => m.id !== del.dataset.del) }); paintStudio(); return; }
@@ -460,7 +485,8 @@
     }).join("") + "</div></div>").join("") +
       '<div class="prow"><b>Effects</b><div class="popts">' + Object.entries(T.EFFECTS).map(([k, o]) => '<button class="popt' + ((stack.effects || []).includes(k) ? " on" : "") + '" data-fx="' + k + '" title="' + esc(o.hint) + '">' + esc(o.name) + "</button>").join("") + "</div></div>";
     setHtml($("pieces"), rows);
-    $("pieces").querySelectorAll("[data-cat]").forEach((b) => (b.onclick = () => setTheme({ [b.dataset.cat]: b.dataset.k })));
+    $("pieces").querySelectorAll("[data-cat]").forEach((b) => { b.onclick = () => setTheme({ [b.dataset.cat]: b.dataset.k }); b.onmouseenter = () => showMini({ ...P("theme"), [b.dataset.cat]: b.dataset.k }); b.onmouseleave = () => showMini(); });
+    $("pieces").querySelectorAll("[data-fx]").forEach((b) => { b.onmouseenter = () => { const f = new Set(P("theme").effects || []); f.has(b.dataset.fx) ? f.delete(b.dataset.fx) : f.add(b.dataset.fx); showMini({ ...P("theme"), effects: [...f] }); }; b.onmouseleave = () => showMini(); });
     $("pieces").querySelectorAll("[data-fx]").forEach((b) => (b.onclick = () => { const fx = new Set(P("theme").effects || []); fx.has(b.dataset.fx) ? fx.delete(b.dataset.fx) : fx.add(b.dataset.fx); setTheme({ effects: [...fx] }); }));
   }
   $("keep-colors").onchange = (e) => save({ keepColors: e.target.checked });
@@ -630,6 +656,26 @@
     return 1;
   }.toString() + ")";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(BADGE_PAGE + "(" + JSON.stringify(s2) + ")").catch(() => {}); });
+  // Fluxer: if you were at the bottom of a chat, you stay at the bottom when something changes size
+  // (a new message, a picture loading, the search panel opening) instead of the last message ending up under the box
+  const STICK = "(" + function () {
+    if (window.__bcStick) return 1;
+    window.__bcStick = 1;
+    var sc = null, atBottom = true;
+    var ro = new ResizeObserver(function () { if (sc && atBottom) sc.scrollTop = sc.scrollHeight; });
+    var onScroll = function () { atBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 30; };
+    var hook = function () {
+      var s = document.querySelector('[data-flx="channel.messages.scroller"]');
+      if (s === sc) return;
+      ro.disconnect(); if (sc) sc.removeEventListener("scroll", onScroll);
+      sc = s; atBottom = true; if (!s) return;
+      s.addEventListener("scroll", onScroll, { passive: true });
+      ro.observe(s); var c = s.querySelector('[data-flx="channel.messages.scroller-content"]'); if (c) ro.observe(c);
+    };
+    setInterval(hook, 1000); hook();
+    return 1;
+  }.toString() + ")()";
+  $("wv-fluxer").addEventListener("dom-ready", () => { $("wv-fluxer").executeJavaScript(STICK).catch(() => {}); });
 
   // ---- the card you get when you click a badge ----
   const cardEsc = esc;
@@ -782,6 +828,21 @@
     try { return await sending; } finally { sending = null; }
   }
 
+  // ---------------- app: tray and updates ----------------
+  $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
+  async function checkUpdate(loud) {
+    if (!host.checkUpdate) return;
+    if (loud) $("upd-msg").textContent = "Checking…";
+    const r = await host.checkUpdate().catch(() => null);
+    if (!r) return;
+    $("app-ver").textContent = "Version " + r.version;
+    $("updbtn").hidden = !r.available;
+    if (loud) $("upd-msg").textContent = r.available ? "Version " + r.latest + " is ready" : r.error ? "Couldn't check" : "Up to date";
+  }
+  const doUpdate = async () => { $("updbtn").textContent = "Updating…"; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
+  $("updbtn").onclick = doUpdate;
+  $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
+
   // ---------------- start ----------------
   (async () => {
     try { prefs = (await host.getPrefs()) || {}; } catch { prefs = {}; }
@@ -798,6 +859,7 @@
     setMode(P("mode"), true);
     tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // (in case a site was quicker than your settings)
     setInterval(() => { tick(); if (document.body.dataset.mode === "dash") paintDash(); }, 15000);
+    $("opt-tray").checked = P("tray") !== false; checkUpdate(); setInterval(checkUpdate, 6 * 3600000);
     intro(); paintBadges(); if (P("badgesDirty")) sendBadges(true);
   })();
 })();

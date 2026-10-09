@@ -159,9 +159,10 @@
     const f = FONTS[stack.font];
     if (f && f.stack) out.push(vars(R, { "--font-sans": f.stack }), R + " body{font-family:" + f.stack + "}");
     const sz = (SIZES[stack.size] || {}).px;
-    if (sz) out.push(R + " [data-flx='channel.message.article.alt-click']{font-size:" + sz + "px}");
+    // (Fluxer puts its own text size and spacing on the message list itself, so these go there and win)
+    if (sz) out.push(R + " [data-flx='channel.messages.messages-wrapper']," + R + " [data-flx='channel.message.article.alt-click']{font-size:" + sz + "px!important}");
     const sp = (SPACING[stack.spacing] || {}).px;
-    if (sp != null) out.push(vars(R, { "--message-group-spacing": sp + "px" }));
+    if (sp != null) out.push(R + " [data-flx='channel.messages.messages-wrapper']{--message-group-spacing:" + sp + "px!important}");
     const fx = new Set(stack.effects || []), L = bgLayer(stack, t, x);
     const grid = R + " [data-flx='channel.channel-view.channel-view-scaffold.channel-grid']:not([data-voice-text-split-view])";
     const panels = [R + " [data-flx='app.guild-sidebar.guild-navbar']", R + " [data-flx='channel.direct-message.dm-list.dm-list-container']", R + " [data-flx='channel.member-list-container.member-list-container']", R + " [data-flx='channel.member-list-container.member-list-scroller']", R + " [data-flx='app.guilds-layout.user-area-wrapper']"].join(",");
