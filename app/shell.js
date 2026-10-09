@@ -34,6 +34,10 @@
       f.onchange = async () => {
         const file = f.files && f.files[0]; f.value = "";
         if (!file) return resolve(null);
+        if (file.type === "image/gif") { // a GIF stays a GIF, so it keeps moving
+          if (file.size > 15 * 1024 * 1024) { toast("That GIF is over 15 MB. Pick a smaller one."); return resolve(null); }
+          const rd = new FileReader(); rd.onload = () => resolve(String(rd.result)); rd.onerror = () => resolve(null); rd.readAsDataURL(file); return;
+        }
         try {
           const im = await createImageBitmap(file);
           const k = Math.min(1, maxW / im.width, maxH / im.height);
@@ -453,9 +457,9 @@
     const bg = L ? '<div class="mbg' + (glass ? " all" : "") + '" style="' + esc(T.bgDecl(L)) + '"></div>' : "";
     const msg = (name, color, text, mention) => '<div class="mm' + (fx.has("bubbles") ? " bub" : "") + (mention ? " men" : "") + '"><i style="background:' + color + '"></i><div><b style="color:' + color + '">' + name + "</b><span>" + text + "</span></div></div>";
     return '<div class="mapp' + (fx.has("glow") ? " glow" : "") + (fx.has("shadows") ? " shad" : "") + (fx.has("scanlines") ? " scan" : "") + '" style="' + esc(vars) + '">' + (glass ? bg : "") +
-      '<div class="mrail"><i class="d"></i><i></i><i></i><i></i></div><div class="mside"><b>THE FELLAS</b><p class="sel"># general</p><p># memes</p><p>🔊 Gaming</p></div>' +
-      '<div class="mchat">' + (glass ? "" : bg) + '<div class="mhead"># general</div><div class="mmsgs">' + msg("Pear", "#5aa469", "are you coming to game night?", true) + msg("Mythbell", "#4a6cd4", "bro i knew it") + msg("Kiwi", "#c75b9b", "look at this cat") + '</div><div class="mbox">Message #general</div></div>' +
-      '<div class="mmem"><p>ONLINE</p><p><i style="background:#5aa469"></i>Pear</p><p><i style="background:#4a6cd4"></i>Mythbell</p><p><i style="background:#c75b9b"></i>Kiwi</p></div></div>';
+      '<div class="mrail"><i class="d"></i><i></i><i></i><i></i></div><div class="mside"><b>My server</b><p class="sel"># general</p><p># memes</p><p>🔊 Gaming</p></div>' +
+      '<div class="mchat">' + (glass ? "" : bg) + '<div class="mhead"># general</div><div class="mmsgs">' + msg("Alex", "#5aa469", "are you coming to game night?", true) + msg("Sam", "#4a6cd4", "i knew it") + msg("Riley", "#c75b9b", "look at this cat") + '</div><div class="mbox">Message #general</div></div>' +
+      '<div class="mmem"><p>ONLINE</p><p><i style="background:#5aa469"></i>Alex</p><p><i style="background:#4a6cd4"></i>Sam</p><p><i style="background:#c75b9b"></i>Riley</p></div></div>';
   }
   function showMini(stack) { setHtml($("mini"), mini(stack || P("theme"))); }
   function paintStudio() {

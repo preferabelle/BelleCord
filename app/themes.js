@@ -160,7 +160,8 @@
     if (f && f.stack) out.push(vars(R, { "--font-sans": f.stack }), R + " body{font-family:" + f.stack + "}");
     const sz = (SIZES[stack.size] || {}).px;
     // (Fluxer puts its own text size and spacing on the message list itself, so these go there and win)
-    if (sz) out.push(R + " [data-flx='channel.messages.messages-wrapper']," + R + " [data-flx='channel.message.article.alt-click']{font-size:" + sz + "px!important}");
+    if (sz) out.push(R + " [data-flx='channel.messages.messages-wrapper']{--message-line-height:" + Math.round(sz * 1.375) + "px!important}" + R + " [data-flx='channel.messages.messages-wrapper']," + R + " [data-flx='channel.message.article.alt-click']{font-size:" + sz + "px!important}" +
+      R + " [data-flx='channel.message.article.alt-click'] :is([class*='Message.module__messageAuthorInfo'],[class*='Message.module__messageUsername']){font-size:" + sz + "px!important}" + R + " [data-flx='channel.message.article.alt-click'] [class*='Message.module__messageTimestamp']{font-size:" + Math.round(sz * 0.75) + "px!important}");
     const sp = (SPACING[stack.spacing] || {}).px;
     if (sp != null) out.push(R + " [data-flx='channel.messages.messages-wrapper']{--message-group-spacing:" + sp + "px!important}");
     const fx = new Set(stack.effects || []), L = bgLayer(stack, t, x);

@@ -47,7 +47,7 @@ ipcMain.handle("img:get", (e, key) => { try { return fs.readFileSync(imgFile(key
 ipcMain.handle("img:set", (e, key, data) => {
   try {
     if (data == null || data === "") { fs.rmSync(imgFile(key), { force: true }); return true; }
-    if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(String(data)) || String(data).length > 12_000_000) return false;
+    if (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(String(data)) || String(data).length > 22_000_000) return false;
     fs.mkdirSync(imgDir(), { recursive: true }); fs.writeFileSync(imgFile(key), String(data)); return true;
   } catch { return false; }
 });
