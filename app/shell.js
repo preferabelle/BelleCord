@@ -5,6 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const host = window.bcApp || { hub: async () => ({ ok: false, error: "offline" }), getPrefs: async () => ({}), setPrefs: async (c) => c, getImg: async () => null, setImg: async () => true, notify: async () => {}, openExternal: async () => {}, setTitleBar: async () => {}, onSwitch: () => {}, onNotice: () => {} };
   const T = window.bcThemes, R = window.bcRail;
+  try { const kf = document.createElement("style"); kf.textContent = T.KEYFRAMES || ""; document.head.appendChild(kf); } catch {} // (moving backgrounds in the previews)
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const SIDES = ["fluxer", "discord"];
   const sideName = (s) => (s === "fluxer" ? "Fluxer" : "Discord");
@@ -838,13 +839,14 @@
     if (!host.checkUpdate) return;
     if (loud) $("upd-msg").textContent = "Checking…";
     const r = await host.checkUpdate().catch(() => null);
-    if (!r) return;
+    if (!r || (r.error && !loud)) { if ((checkUpdate.tries = (checkUpdate.tries || 0) + 1) <= 5) setTimeout(checkUpdate, 60000); if (!r) return; } else checkUpdate.tries = 0; // (no internet yet when the app opened: try again in a minute)
     $("app-ver").textContent = "Version " + r.version;
     $("updbtn").hidden = !r.available;
     if (loud) $("upd-msg").textContent = r.available ? "Version " + r.latest + " is ready" : r.error ? "Couldn't check" : "Up to date";
   }
   const doUpdate = async () => { $("updbtn").textContent = "Updating…"; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
+  setTimeout(() => checkUpdate(), 4000); // (on its own, so nothing else at start-up can stop it)
   $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
 
   // ---------------- start ----------------
@@ -863,7 +865,7 @@
     setMode(P("mode"), true);
     tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // (in case a site was quicker than your settings)
     setInterval(() => { tick(); if (document.body.dataset.mode === "dash") paintDash(); }, 15000);
-    $("opt-tray").checked = P("tray") !== false; checkUpdate(); setInterval(checkUpdate, 6 * 3600000);
+    $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
     intro(); paintBadges(); if (P("badgesDirty")) sendBadges(true);
   })();
 })();

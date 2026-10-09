@@ -298,4 +298,4 @@ body.mac #bar{padding:0 12px 0 80px}
 .shad .mside,.shad .mmem{box-shadow:0 0 22px rgba(0,0,0,.35)}
 .scan .mchat::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
 .mapp .mside,.mapp .mmem{backdrop-filter:blur(10px)}
-@keyframes bcDrift{0%{background-position:0% 50%}100%{background-position:100% 50%}}
+@keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}

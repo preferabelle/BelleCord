@@ -5,7 +5,7 @@
   const T = (s) => s.split("|");
   const GAMES = [
     { key: "overwatch", name: "Overwatch", glyph: "OW", color: "#f99e1a", handle: "BattleTag", hint: "Name#1234", live: "overwatch",
-      ranks: T("Bronze|Silver|Gold|Platinum|Diamond|Master|Grandmaster|Champion|Top 500"), roles: T("Tank|Damage|Support"), mainLabel: "Main hero",
+      ranks: T("Bronze|Silver|Gold|Platinum|Emerald|Diamond|Master|Grandmaster|Champion|Top 500"), roles: T("Tank|Damage|Support"), mainLabel: "Main hero",
       mains: T("Ana|Ashe|Baptiste|Bastion|Brigitte|Cassidy|D.Va|Doomfist|Echo|Freja|Genji|Hanzo|Hazard|Illari|Junker Queen|Junkrat|Juno|Kiriko|Lifeweaver|Lúcio|Mauga|Mei|Mercy|Moira|Orisa|Pharah|Ramattra|Reaper|Reinhardt|Roadhog|Sigma|Sojourn|Soldier: 76|Sombra|Symmetra|Torbjörn|Tracer|Venture|Widowmaker|Winston|Wrecking Ball|Zarya|Zenyatta"),
       stats: T("Win rate|KDA|Games|Time played") },
     { key: "valorant", name: "Valorant", glyph: "VAL", color: "#ff4655", handle: "Riot ID", hint: "Name#TAG",

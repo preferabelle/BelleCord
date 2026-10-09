@@ -39,7 +39,7 @@
     grid: { name: "Synth grid", css: (t) => "linear-gradient(180deg,transparent 0 55%," + mix(t.accent, 22) + " 100%),repeating-linear-gradient(90deg," + mix(t.link, 16) + " 0 1px,transparent 1px 48px),repeating-linear-gradient(0deg," + mix(t.accent, 16) + " 0 1px,transparent 1px 48px)" },
     dots: { name: "Confetti", css: (t) => "radial-gradient(circle at 15% 25%," + mix(t.accent, 40) + " 0 3px,transparent 4px),radial-gradient(circle at 65% 15%," + mix(t.link, 40) + " 0 2.5px,transparent 3.5px),radial-gradient(circle at 40% 60%,#ffd16655 0 3px,transparent 4px),radial-gradient(circle at 85% 70%," + mix(t.accent, 34) + " 0 2px,transparent 3px),radial-gradient(circle at 25% 85%,#7ee8c855 0 2.5px,transparent 3.5px)", size: "180px 180px" },
     embers: { name: "Embers", css: (t) => "radial-gradient(ellipse 120% 60% at 50% 110%," + mix(t.accent, 30) + ",transparent 60%),radial-gradient(2px 2px at 20% 70%,#ffb36688,transparent 70%),radial-gradient(1.5px 1.5px at 70% 40%,#ff8a3d77,transparent 70%),radial-gradient(2px 2px at 45% 85%,#ffd27f77,transparent 70%),radial-gradient(1.5px 1.5px at 85% 75%,#ff7a2f88,transparent 70%)" },
-    damask: { name: "Damask", css: (t) => "repeating-conic-gradient(from 45deg at 50% 50%," + mix(t.accent, 7) + " 0 25%,transparent 0 50%) 0 0/56px 56px,radial-gradient(circle at 50% 50%," + mix(t.accent, 10) + " 0 6px,transparent 7px) 0 0/56px 56px" },
+    damask: { name: "Damask", css: (t) => "repeating-conic-gradient(from 45deg at 50% 50%," + mix(t.accent, 7) + " 0 25%,transparent 0 50%),radial-gradient(circle at 50% 50%," + mix(t.accent, 10) + " 0 6px,transparent 7px)", size: "56px 56px" },
     aurora: { name: "Aurora", css: () => "linear-gradient(125deg,#0b1d3a,#11506b,#2b6b5f,#5b3f8c,#8a2f6b,#0b1d3a)", size: "400% 400%", moving: true },
   };
   const mix = (c, pct) => "color-mix(in srgb," + c + " " + pct + "%,transparent)";
@@ -66,7 +66,7 @@
   const EFFECTS = {
     glass: { name: "Glass", hint: "See-through panels over the background" },
     glow: { name: "Glow", hint: "A soft glow on what's selected and on the message box" },
-    bubbles: { name: "Bubbles", hint: "Each message in its own rounded bubble" },
+    bubbles: { name: "Bubbles", hint: "Messages in a rounded bubble (one per person\u2019s messages in a row)" },
     shadows: { name: "Soft shadows", hint: "Panels float a little" },
     scanlines: { name: "Scanlines", hint: "An old-monitor shimmer over the chat" },
     drift: { name: "Moving background", hint: "The background slowly drifts" },
@@ -121,8 +121,17 @@
     if (!css) return null;
     return { css, size: b.size || "", moving: !!(b.moving || (stack.effects || []).includes("drift")), wall: stack.background === "wallpaper", strength: x.strength, blur: x.blur };
   };
-  const bgDecl = (L) => "background:" + L.css + (L.size ? ";background-size:" + L.size : "") + (L.moving ? ";animation:bcDrift 60s linear infinite alternate" : "") + (L.wall ? ";opacity:" + (Math.max(4, Math.min(80, Number(L.strength) || 30)) / 100).toFixed(2) + (L.blur ? ";filter:blur(" + L.blur + "px)" : "") : "");
-  const KEYFRAMES = "@keyframes bcDrift{0%{background-position:0% 50%}100%{background-position:100% 50%}}";
+  // moving backgrounds: a tiled pattern (like Damask) slides by exactly one tile and loops; anything else is
+  // made a bit bigger than its box and pans slowly back and forth (a background exactly as big as its box
+  // has nowhere to move, which is why "Moving background" did nothing before)
+  const moveOf = (L) => {
+    if (!L || !L.moving) return null;
+    const px = String(L.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/);
+    if (px) { const w = +px[1], h = +(px[2] || px[1]); return { size: L.size, anim: "bcDriftT" + w + "x" + h + " " + Math.max(8, Math.round(w / 5)) + "s linear infinite" }; }
+    return { size: /%/.test(L.size || "") ? L.size : "160% 160%", anim: "bcDrift 40s ease-in-out infinite alternate" };
+  };
+  const bgDecl = (L) => { const m = moveOf(L); return "background:" + L.css + ";" + (m ? "background-size:" + m.size + "!important;animation:" + m.anim + "!important;animation-play-state:running!important" : L.size ? "background-size:" + L.size : "") + (L.wall ? ";opacity:" + (Math.max(4, Math.min(80, Number(L.strength) || 30)) / 100).toFixed(2) + (L.blur ? ";filter:blur(" + L.blur + "px)" : "") : ""); };
+  const KEYFRAMES = "@keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}" + Object.values(BACKGROUNDS).map((b) => { const m = String(b.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/); if (!m) return ""; const w = +m[1], h = +(m[2] || m[1]); return "@keyframes bcDriftT" + w + "x" + h + "{from{background-position:0 0}to{background-position:" + w * 2 + "px " + h + "px}}"; }).join("");
 
   // ---------------- Fluxer ----------------
   // the selected channel row (its classes, as Fluxer's build names them)
@@ -184,7 +193,8 @@
     }
     if (fx.has("glow")) out.push(R + " " + SEL_CH + "{box-shadow:0 0 14px " + mix(t.accent, 45) + ",inset 0 0 0 1px " + mix(t.accent, 55) + "!important}",
       R + " [data-flx='channel.lexical-channel-textarea-content.textarea-outer']{box-shadow:0 0 0 1px " + mix(t.accent, 55) + ",0 0 22px " + mix(t.accent, 30) + "!important}");
-    if (fx.has("bubbles")) out.push(R + " [data-flx='channel.message.article.alt-click']:not([data-flx-system]){margin:3px 14px!important;padding-top:6px;padding-bottom:6px;border-radius:" + Math.max(10, r || 12) + "px;background:color-mix(in srgb," + t.raised + " 55%,transparent)}");
+    // bubbles: one bubble per run of messages (Fluxer already groups someone's messages in a row)
+    if (fx.has("bubbles")) out.push(R + " [data-flx='channel.message-group.group']:not(:has([data-flx-system])){margin:3px 14px!important;padding-top:6px;padding-bottom:6px;border-radius:" + Math.max(10, r || 12) + "px;background:color-mix(in srgb," + t.raised + " 55%,transparent)}", R + " [data-flx='channel.message-group.group'] [class*='Message.module__messageGrouped']{padding-top:0!important;padding-bottom:0!important}");
     if (fx.has("shadows")) out.push(panels + "{box-shadow:0 0 28px rgba(0,0,0,.35)}");
     if (fx.has("scanlines")) out.push(grid + "::after{content:'';position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}", grid + "{position:relative!important}");
     return out.join("\n");
@@ -246,7 +256,13 @@
     }
     if (fx.has("glow")) out.push(C("modeSelected") + " " + C("link") + "{box-shadow:0 0 14px " + mix(t.accent, 45) + ",inset 0 0 0 1px " + mix(t.accent, 55) + "}",
       C("channelTextArea") + "{box-shadow:0 0 0 1px " + mix(t.accent, 55) + ",0 0 22px " + mix(t.accent, 30) + "!important}");
-    if (fx.has("bubbles")) out.push("li[id^='chat-messages-']>" + C("message") + "{margin:3px 14px!important;border-radius:" + Math.max(10, r || 12) + "px;background:color-mix(in srgb," + t.raised + " 55%,transparent)}");
+    // bubbles: someone's messages in a row share one bubble (rounded at the top of the run and at the bottom)
+    if (fx.has("bubbles")) {
+      const L = "li[id^='chat-messages-']", M = L + ">" + C("message"), rad = Math.max(10, r || 12) + "px";
+      out.push(M + "{margin-left:14px!important;margin-right:14px!important;border-radius:0;background:color-mix(in srgb," + t.raised + " 55%,transparent)}",
+        L + ">" + C("message") + C("groupStart") + "{border-top-left-radius:" + rad + ";border-top-right-radius:" + rad + "}",
+        L + ":not(:has(+ " + L + ">" + C("message") + ":not(" + C("groupStart") + ")))>" + C("message") + "{border-bottom-left-radius:" + rad + ";border-bottom-right-radius:" + rad + ";margin-bottom:3px}");
+    }
     if (fx.has("shadows")) out.push(panels + "{box-shadow:0 0 28px rgba(0,0,0,.35)}");
     if (fx.has("scanlines")) out.push(C("chat") + "{position:relative}", C("chat") + "::after{content:'';position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}");
     return out.join("\n");
@@ -287,5 +303,5 @@
     return out;
   }.toString() + ")()";
 
-  window.bcThemes = { PALETTES, BACKGROUNDS, CORNERS, FONTS, SIZES, SPACING, EFFECTS, CATS, TEMPLATES, DEFAULT_STACK, tokens, fluxerCss, discordCss, shellVars, READ_FLUXER_COLORS, bgLayer, bgDecl, mix };
+  window.bcThemes = { PALETTES, BACKGROUNDS, CORNERS, FONTS, SIZES, SPACING, EFFECTS, CATS, TEMPLATES, DEFAULT_STACK, tokens, fluxerCss, discordCss, shellVars, READ_FLUXER_COLORS, bgLayer, bgDecl, mix, KEYFRAMES };
 })();
