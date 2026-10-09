@@ -661,6 +661,37 @@
     return 1;
   }.toString() + ")";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(BADGE_PAGE + "(" + JSON.stringify(s2) + ")").catch(() => {}); });
+  // Belle's bridged bots on Fluxer (the mirrors that speak for her Discord friends) don't wear a BOT tag: they're people
+  const NOBOT_PAGE = "(" + function (ids) {
+    window.__bcBridged = new Set(ids);
+    if (window.__bcNoBot) return 1;
+    window.__bcNoBot = 1;
+    var css = document.createElement("style"); css.textContent = ".bc-nobot{display:none!important}";
+    (document.head || document.documentElement).appendChild(css);
+    var idOf = function (el) {
+      for (var up = el, n = 0; up && n < 12; up = up.parentElement, n++) {
+        var a = up.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id");
+        var ims = up.querySelectorAll("img"); for (var i = 0; i < ims.length; i++) { var m = (ims[i].currentSrc || ims[i].src || "").match(/\/avatars\/(\d{5,25})\//); if (m) return m[1]; }
+      }
+      return null;
+    };
+    var scan = function () {
+      var tags = document.querySelectorAll('[data-flx="channel.user-tag.tag"],[class*="ChannelUserTag.module__tag"]');
+      for (var i = 0; i < tags.length; i++) {
+        var t = tags[i]; if (t.getAttribute("data-bcnb")) continue;
+        var id = idOf(t); if (!id) continue;
+        t.setAttribute("data-bcnb", "1");
+        if (window.__bcBridged.has(id)) t.classList.add("bc-nobot");
+      }
+    };
+    setInterval(scan, 800); scan();
+    return 1;
+  }.toString() + ")";
+  let bridged = [];
+  const sendBridged = () => { try { $("wv-fluxer").executeJavaScript(NOBOT_PAGE + "(" + JSON.stringify(bridged) + ")").catch(() => {}); } catch {} };
+  const loadBridged = () => hub("GET", "/v1/bridged").then((r) => { if (r && r.ok && r.data && Array.isArray(r.data.ids)) { bridged = r.data.ids; sendBridged(); } });
+  $("wv-fluxer").addEventListener("dom-ready", sendBridged);
+  loadBridged(); setInterval(loadBridged, 10 * 60000);
   // Fluxer: if you were at the bottom of a chat, you stay at the bottom when something changes size
   // (a new message, a picture loading, the search panel opening) instead of the last message ending up under the box
   const STICK = "(" + function () {
