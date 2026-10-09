@@ -17,7 +17,7 @@
     mode: "fluxer", side: "fluxer", rail: "cols", split: 50, theme: { ...T.DEFAULT_STACK }, keepColors: false, myThemes: [],
     skins: [{ id: "me", name: "Me", color: "" }], wearF: "me", wearD: "me", wStr: 30, wBlur: 2,
     countdowns: [], links: [], inbox: [], today: null, todaySeen: [], voiceSeen: {}, pinNoteSeen: false,
-    me: {}, myName: "", myBadges: {}, hubKey: "", badgesDirty: false, badgeCache: {},
+    me: {}, myName: "", pilotName: "", myBadges: {}, hubKey: "", badgesDirty: false, badgeCache: {},
   };
   const P = (k) => (prefs[k] === undefined ? DEF[k] : prefs[k]);
   async function save(changes) { Object.assign(prefs, changes); try { prefs = Object.assign(await host.setPrefs(changes), prefs); } catch {} }
@@ -551,13 +551,25 @@
     $("ln-name").value = ""; $("ln-url").value = ""; drawLinks();
   };
 
+  // ---------------- the first time: your name (it goes on the intro, "PILOT · NAME") ----------------
+  function askName() {
+    if (P("pilotName")) return Promise.resolve();
+    return new Promise((done) => {
+      const box = document.createElement("div"); box.id = "namebox";
+      box.innerHTML = '<form><h2>Welcome to BelleCord</h2><p>What should I call you?</p><input maxlength="24" autocomplete="off" placeholder="Your name" required><button class="primary" type="submit">Let\'s go</button></form>';
+      const inp = box.querySelector("input");
+      box.querySelector("form").onsubmit = (e) => { e.preventDefault(); const v = inp.value.trim().slice(0, 24); if (!v) return inp.focus(); save({ pilotName: v }); $("pilot-name").value = v; box.remove(); try { sessionStorage.removeItem("bcIntro"); } catch {} done(); };
+      document.body.appendChild(box); setTimeout(() => inp.focus(), 50);
+    });
+  }
+
   // ---------------- the intro (Belle's, with your name) ----------------
   function intro() {
     const sp = $("bcsplash");
     if (!sp || sessionStorage.getItem("bcIntro")) return;
     try { sessionStorage.setItem("bcIntro", "1"); } catch {}
     $("bcswm").innerHTML = "BELLECORD".split("").map((c, i) => '<span style="animation-delay:' + (0.45 + i * 0.05).toFixed(2) + 's">' + c + "</span>").join("");
-    const pilot = String(P("myName") || (skinOf(curSide()).name !== "Me" ? skinOf(curSide()).name : "") || "").toUpperCase();
+    const pilot = String(P("pilotName") || "").toUpperCase(); // (the name you typed the first time, or in App)
     $("bcspilot").textContent = pilot ? "PILOT · " + pilot : "PILOT";
     sp.hidden = false;
     const n = $("bcsync"), t0 = performance.now() + 1250;
@@ -900,6 +912,8 @@
     tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // (in case a site was quicker than your settings)
     setInterval(() => { tick(); if (document.body.dataset.mode === "dash") paintDash(); }, 15000);
     $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
-    intro(); paintBadges(); if (P("badgesDirty")) sendBadges(true);
+    $("pilot-name").value = P("pilotName") || "";
+    $("pilot-name").onchange = () => { const v = $("pilot-name").value.trim().slice(0, 24); save({ pilotName: v }); toast(v ? "Hi, " + v + "!" : "Name cleared."); };
+    askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true);
   })();
 })();
