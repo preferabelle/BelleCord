@@ -1,0 +1,30 @@
+BELLECORD
+
+This is a streamlined version of my app, BelleCord: Fluxer and Discord in one window.
+If you find any bugs, tell me (screenshots help a lot).
+
+HOW TO START IT
+1. Unzip this folder somewhere it won't get moved.
+2. Install Node.js (the LTS version) from nodejs.org.
+3. Start it:
+   Windows: double-click "START (Windows).bat".
+   Mac: right-click "START (Mac).command", choose Open, then Open again (only the first time).
+   Linux: open a terminal in this folder and run  ./"START (Linux).sh"
+   The first time takes a few minutes.
+4. Sign in to Fluxer and Discord.
+When there's a new version, an Update button shows up at the top of the app. Click it and it restarts updated.
+
+WHAT'S IN IT
+- Fluxer servers on the left, Discord servers on the right.
+- Top left: the dashboard (right-click to change its picture). Top right: your DMs.
+- Ctrl+1 Fluxer, Ctrl+2 Discord, Ctrl+3 both, Ctrl+4 dashboard (Cmd on Mac).
+- T, P and X in the title bar: TikTok, Pinterest and X.
+- Closing the window keeps it running in the tray (you can turn that off on the dashboard).
+
+THE DASHBOARD
+Inbox, voice channels, who's online, today's stats, countdowns, skins, game badges and themes.
+
+GOOD TO KNOW
+- Pinterest: Google sign-in doesn't work in the app. Use the QR code or your email and password.
+- The app changes how Discord looks, which Discord's rules technically don't allow (same as BetterDiscord or
+  Vencord themes). It only changes looks.
