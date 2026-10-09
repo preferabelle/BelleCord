@@ -572,7 +572,7 @@
   const hub = (method, route, payload) => (host.hub ? host.hub(method, route, payload).catch(() => ({ ok: false, error: "offline" })) : Promise.resolve({ ok: false, error: "offline" }));
   const people2 = new Map(); // "fluxer:id" -> person or null (fetched this session)
   const asking = new Set(); let askTimer = null;
-  const badgeList = (person) => (person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name })) : []);
+  const badgeList = (person) => (person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : []);
   function rememberPerson(k, person) {
     people2.set(k, person);
     const bc = { ...P("badgeCache") };
@@ -615,7 +615,7 @@
     window.__bcGB = 1;
     var cache = {}, asked = {};
     var css = document.createElement("style");
-    css.textContent = ".bc-gbrow{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;margin:2px 0 0 6px;vertical-align:middle}.bc-gbrow button{width:22px;height:22px;border-radius:6px;border:0;padding:0;cursor:pointer;color:#fff;font:900 8.5px/1 'Segoe UI',sans-serif;letter-spacing:-.02em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);text-shadow:0 1px 1px rgba(0,0,0,.4)}.bc-gbrow button:hover{filter:brightness(1.15);transform:translateY(-1px)}";
+    css.textContent = ".bc-gbrow{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 0 4px;vertical-align:middle}.bc-gbrow button{width:22px;height:22px;border-radius:7px;border:0;padding:0;cursor:pointer;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:900 8.5px/1 'Segoe UI',sans-serif;letter-spacing:-.02em;background-image:linear-gradient(160deg,rgba(255,255,255,.3),rgba(255,255,255,0) 45%,rgba(0,0,0,.28))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 1px 3px rgba(0,0,0,.45);transition:transform .12s}.bc-gbrow button svg{width:14px;height:14px;display:block}.bc-gbrow button:hover{filter:brightness(1.15);transform:translateY(-1px)}";
     (document.head || document.documentElement).appendChild(css);
     var idIn = function (box) {
       if (side === "fluxer") { var a = box.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id"); }
@@ -647,7 +647,7 @@
       if (!row) { row = document.createElement("span"); row.className = "bc-gbrow"; if (a.after) a.el.after(row); else a.el.appendChild(row); }
       row.setAttribute("data-sig", sig); row.textContent = "";
       list.forEach(function (b) {
-        var x = document.createElement("button"); x.type = "button"; x.textContent = b.glyph; x.title = b.name; x.setAttribute("aria-label", b.name + " profile"); x.style.background = b.color;
+        var x = document.createElement("button"); x.type = "button"; if (b.svg) x.innerHTML = b.svg; else x.textContent = b.glyph; x.title = b.name; x.setAttribute("aria-label", b.name + " profile"); x.style.background = b.color;
         x.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); console.log("__bcgb:open:" + JSON.stringify({ key: a.key, game: b.key })); }, true);
         row.appendChild(x);
       });
@@ -703,20 +703,23 @@
     const box = $("gcard").querySelector(".gcbox"), L = live || {};
     const accent = g.accent || game.color;
     const av = L.avatar || person.avatar;
-    const stats = {}; for (const [k, v] of Object.entries(g.stats || {})) if (v) stats[k] = v; for (const [k, v] of Object.entries(L.stats || {})) if (v) stats[k] = v;
-    const rr = {}; for (const [k, v] of Object.entries(g.roleRanks || {})) if (v) rr[k] = v; for (const [k, v] of Object.entries(L.roleRanks || {})) if (v) rr[k] = v;
-    const ranks = Object.keys(rr).length ? Object.entries(rr) : g.rank ? [[game.rankLabel || "Rank", g.rank + (g.rankDetail ? " " + g.rankDetail : "")]] : [];
-    const main = g.main || L.main, sticker = g.showSticker !== false ? g.sticker || L.mainPortrait || null : null;
+    const real = !!game.live; // (a game with live stats shows only those: nobody can type in their own rank or stats)
+    const stats = {}; if (!real) for (const [k, v] of Object.entries(g.stats || {})) if (v) stats[k] = v; for (const [k, v] of Object.entries(L.stats || {})) if (v) stats[k] = v;
+    const rr = {}; if (!real) for (const [k, v] of Object.entries(g.roleRanks || {})) if (v) rr[k] = v; for (const [k, v] of Object.entries(L.roleRanks || {})) if (v) rr[k] = v;
+    const ranks = Object.keys(rr).length ? Object.entries(rr) : g.rank && !real ? [[game.rankLabel || "Rank", g.rank + (g.rankDetail ? " " + g.rankDetail : "")]] : [];
+    const main = g.main || L.main, mainPic = g.main ? (L.portraits && L.portraits[String(g.main).toLowerCase()]) || null : L.mainPortrait || null;
+    const most = g.main && L.main && String(L.main).toLowerCase() !== String(g.main).toLowerCase() ? L.main : "";
+    const sticker = g.showSticker !== false ? g.sticker || mainPic || null : null;
     const others = badgeList(person).filter((b) => b.key !== game.key);
     box.style.setProperty("--gc", accent);
     box.style.setProperty("--gcard", L.banner ? 'url("' + L.banner + '")' : "linear-gradient(135deg," + accent + ",#24262b)");
     box.innerHTML =
-      (others.length ? '<div class="gswitch">' + badgeList(person).map((b) => '<button class="gb" data-g="' + b.key + '" title="' + cardEsc(b.name) + '" style="background:' + b.color + (b.key === game.key ? ";box-shadow:0 0 0 2px #fff" : "") + '">' + cardEsc(b.glyph) + "</button>").join("") + "</div>" : "") +
+      (others.length ? '<div class="gswitch">' + badgeList(person).map((b) => '<button class="gb" data-g="' + b.key + '" title="' + cardEsc(b.name) + '" style="background:' + b.color + (b.key === game.key ? ";box-shadow:0 0 0 2px #fff" : "") + '">' + (G.icon(b.key) || cardEsc(b.glyph)) + "</button>").join("") + "</div>" : "") +
       '<div class="gtop">' + (av ? '<img class="gav" src="' + cardEsc(av) + '" alt="">' : '<span class="gav" style="background:' + accent + '">' + cardEsc((person.name || "?").slice(0, 1)) + "</span>") +
       '<div><div class="gk">' + cardEsc(game.name) + ' profile</div><h2>' + cardEsc(L.name || String(g.handle || person.name || game.name).split("#")[0]) + '</h2><div class="gtag">' + cardEsc(g.handle || "") + (L.title ? " · " + cardEsc(L.title) : "") + "</div></div></div>" +
       '<div class="gbody">' +
       (g.tagline ? '<div class="gline"><div><b>' + cardEsc(g.tagline) + "</b></div></div>" : "") +
-      (main || g.role ? '<div class="gline">' + (L.mainPortrait ? '<img src="' + cardEsc(L.mainPortrait) + '" alt="">' : "") + "<div><b>" + cardEsc(main ? "Mains " + main : g.role) + "</b><small>" + cardEsc([main && g.role ? g.role : "", game.mainLabel && main ? game.mainLabel : ""].filter(Boolean).join(" · ")) + "</small></div></div>" : "") +
+      (main || g.role ? '<div class="gline">' + (mainPic ? '<img src="' + cardEsc(mainPic) + '" alt="">' : "") + "<div><b>" + cardEsc(main ? "Mains " + main : g.role) + "</b><small>" + cardEsc([main && g.role ? g.role : "", most ? "Most played: " + most : game.mainLabel && main ? game.mainLabel : ""].filter(Boolean).join(" · ")) + "</small></div></div>" : "") +
       (sticker ? '<div class="gline"><img src="' + cardEsc(sticker) + '" alt="" style="width:64px;height:64px"><div><b>Sticker</b></div></div>' : "") +
       (g.showRank !== false && ranks.length ? '<div class="ggrid">' + ranks.map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
       (g.showStats !== false && Object.keys(stats).length ? '<div class="ggrid">' + Object.entries(stats).map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
@@ -737,9 +740,9 @@
   let editing = null;
   function paintBadges() {
     const mine = myPerson().games;
-    setHtml($("gb-mine"), badgeList(myPerson()).map((b) => '<button class="mine" data-g="' + b.key + '"><span class="gb" style="background:' + b.color + '">' + esc(b.glyph) + "</span>" + esc(b.name) + "</button>").join(""));
+    setHtml($("gb-mine"), badgeList(myPerson()).map((b) => '<button class="mine" data-g="' + b.key + '"><span class="gb" style="background:' + b.color + '">' + (G.icon(b.key) || esc(b.glyph)) + "</span>" + esc(b.name) + "</button>").join(""));
     $("gb-mine").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openCard("me", b.dataset.g)));
-    setHtml($("gb-games"), G.GAMES.map((g) => '<button data-g="' + g.key + '" class="' + (mine[g.key] ? "has" : "") + (editing === g.key ? " on" : "") + '"><span class="gb" style="background:' + g.color + '">' + esc(g.glyph) + "</span>" + esc(g.name) + (mine[g.key] ? " ✓" : "") + "</button>").join(""));
+    setHtml($("gb-games"), G.GAMES.map((g) => '<button data-g="' + g.key + '" class="' + (mine[g.key] ? "has" : "") + (editing === g.key ? " on" : "") + '"><span class="gb" style="background:' + g.color + '">' + (G.icon(g.key) || esc(g.glyph)) + "</span>" + esc(g.name) + (mine[g.key] ? " ✓" : "") + "</button>").join(""));
     $("gb-games").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => (editing === b.dataset.g ? closeEdit() : editGame(b.dataset.g))));
   }
   function closeEdit() { editing = null; $("gb-edit").hidden = true; paintBadges(); }
@@ -750,10 +753,10 @@
     const opt = (list, sel, none) => '<option value="">' + none + "</option>" + list.map((x) => '<option' + (x === sel ? " selected" : "") + ">" + esc(x) + "</option>").join("") + (sel && !list.includes(sel) ? "<option selected>" + esc(sel) + "</option>" : "");
     const isOW = key === "overwatch";
     const box = $("gb-edit");
-    box.innerHTML = '<h3><span class="gb" style="background:' + game.color + '">' + esc(game.glyph) + "</span>" + esc(game.name) + "</h3>" +
+    box.innerHTML = '<h3><span class="gb" style="background:' + game.color + '">' + (G.icon(game.key) || esc(game.glyph)) + "</span>" + esc(game.name) + "</h3>" +
       '<label>' + esc(game.handle) + '<input type="text" id="ge-handle" maxlength="40" placeholder="' + esc(game.hint) + '" value="' + esc(d.handle || "") + '"></label>' +
       (game.ranks.length && !isOW ? '<label>' + esc(game.rankLabel || "Rank") + '<select id="ge-rank">' + opt(game.ranks, d.rank, "—") + "</select></label>" + (game.rankLabel ? "" : '<label>Division / number<input type="text" id="ge-rankd" maxlength="30" placeholder="2, 1534 LP…" value="' + esc(d.rankDetail || "") + '"></label>') : "") +
-      (isOW ? game.roles.map((r) => '<label>' + r + ' rank<select data-rr="' + r + '">' + opt(game.ranks, (d.roleRanks || {})[r], "—") + "</select></label>").join("") : game.roles ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "—") + "</select></label>" : "") +
+      (isOW ? '<div style="grid-column:1/-1;font-size:12px;opacity:.75">Your ranks and stats come from your real Overwatch profile, so they can\'t be typed in.</div>' : game.roles ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "—") + "</select></label>" : "") +
       '<label>' + esc(game.mainLabel) + (game.mains ? '<select id="ge-main">' + opt(game.mains, d.main, "—") + "</select>" : '<input type="text" id="ge-main" maxlength="40" value="' + esc(d.main || "") + '">') + "</label>" +
       '<label>Color<input type="color" id="ge-accent" value="' + esc(/^#[0-9a-f]{6}$/i.test(d.accent || "") ? d.accent : game.color) + '"></label>' +
       '<label class="wide">A line under the name<textarea id="ge-tag" maxlength="140">' + esc(d.tagline || "") + "</textarea></label>" +

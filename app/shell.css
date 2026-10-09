@@ -299,3 +299,7 @@ body.mac #bar{padding:0 12px 0 80px}
 .scan .mchat::after{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
 .mapp .mside,.mapp .mmem{backdrop-filter:blur(10px)}
 @keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}
+
+/* badges: a small shiny tile with the game's picture */
+.gb{background-image:linear-gradient(160deg,rgba(255,255,255,.3),rgba(255,255,255,0) 45%,rgba(0,0,0,.28))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 1px 3px rgba(0,0,0,.45)!important;border-radius:7px!important}
+.gb svg{width:62%;height:62%;display:block}

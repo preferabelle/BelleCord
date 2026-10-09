@@ -48,7 +48,30 @@
       ranks: [], mainLabel: "Favorite opening", stats: T("Rapid|Blitz|Bullet|Puzzles") },
     { key: "lichess", name: "Lichess", glyph: "♟", color: "#b0b0b0", handle: "Lichess username", hint: "Your Lichess name", live: "lichess",
       ranks: [], mainLabel: "Favorite opening", stats: T("Rapid|Blitz|Bullet|Classical") },
+    { key: "roblox", name: "Roblox", glyph: "RBX", color: "#3b82f6", handle: "Roblox username", hint: "Your Roblox name",
+      ranks: [], mainLabel: "Favorite game", stats: T("Hours|Favorite experience|Friends|Badges") },
   ];
+  // ---- badge pictures: one small original picture per game (drawn here, white on the game's color) ----
+  const S = (d) => '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
+  const ICONS = {
+    overwatch: S('<circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.6" fill="#fff"/>'), // crosshair
+    valorant: S('<path d="M5 19 16.5 7.5"/><path d="M14 4h6v6"/><path d="M8.5 13.5 5 17l2 2 3.5-3.5"/>'), // blade
+    league: S('<path d="M4 4l9 9M4 4h3.5M4 4v3.5"/><path d="M20 4l-9 9M20 4h-3.5M20 4v3.5"/><path d="M8 16l-3 3M16 16l3 3M7 14l3 3M17 14l-3 3"/>'), // crossed swords
+    cs2: S('<circle cx="11" cy="14" r="6"/><path d="M11 8V5.5h3.5"/><path d="M14.5 5.5 18 3"/><path d="M8.5 13.5h5"/>'), // grenade
+    osu: S('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="#fff" stroke="none"/>'), // hit circle
+    fortnite: S('<path d="M3 11a9 9 0 0 1 18 0z"/><path d="M12 11v8.5a2 2 0 0 1-4 0"/>'), // glider umbrella
+    apex: S('<path d="M12 3l7.5 3v5.5c0 4.5-3.2 8.2-7.5 9.5-4.3-1.3-7.5-5-7.5-9.5V6z"/><path d="M12 8.5v7M8.5 12h7"/>'), // shield + heal
+    r6: S('<rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8 7.5h8"/><path d="M12 11v6"/>'), // riot shield
+    rocketleague: S('<circle cx="15" cy="12" r="5.5"/><path d="M2.5 8.5h5M1.5 12h5M2.5 15.5h5"/><path d="M12 8.5l6 7M18 8.5l-6 7"/>'), // ball on the move
+    marvelrivals: S('<path d="M13.5 2.5 5 13.5h6l-1 8 8.5-11h-6z" fill="#fff"/>'), // lightning
+    dota2: S('<path d="M4 18 3 7l5 4 4-6 4 6 5-4-1 11z"/><path d="M4 21h16"/>'), // crown
+    minecraft: S('<path d="M4 5c5-3 11-3 16 0"/><path d="M12 4.5 9.5 21"/>'), // pickaxe
+    chess: S('<circle cx="12" cy="6" r="2.8"/><path d="M9.5 11h5l1 6h-7z"/><path d="M7 20.5h10M8 17.5h8"/>'), // pawn
+    lichess: S('<path d="M6 3.5h2.5v2h2.5v-2h2v2h2.5v-2H18V9l-2 1.5V17H8v-6.5L6 9z"/><path d="M5 20.5h14"/>'), // rook
+    roblox: S('<rect x="3" y="12" width="9" height="8" rx="1"/><rect x="12" y="12" width="9" height="8" rx="1"/><rect x="7.5" y="4" width="9" height="8" rx="1"/><circle cx="7.5" cy="16" r="1" fill="#fff"/><circle cx="16.5" cy="16" r="1" fill="#fff"/><circle cx="12" cy="8" r="1" fill="#fff"/>'), // stacked bricks
+  };
+  const icon = (key) => ICONS[key] || "";
+
   const BY = Object.fromEntries(GAMES.map((g) => [g.key, g]));
-  window.bcGames = { GAMES, BY };
+  window.bcGames = { GAMES, BY, icon };
 })();
