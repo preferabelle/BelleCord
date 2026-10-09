@@ -618,7 +618,7 @@
     css.textContent = ".bc-gbrow{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;margin:2px 0 0 6px;vertical-align:middle}.bc-gbrow button{width:22px;height:22px;border-radius:6px;border:0;padding:0;cursor:pointer;color:#fff;font:900 8.5px/1 'Segoe UI',sans-serif;letter-spacing:-.02em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);text-shadow:0 1px 1px rgba(0,0,0,.4)}.bc-gbrow button:hover{filter:brightness(1.15);transform:translateY(-1px)}";
     (document.head || document.documentElement).appendChild(css);
     var idIn = function (box) {
-      if (side === "fluxer") { var a = box.querySelector("[data-flx-user-id]"); return a ? a.getAttribute("data-flx-user-id") : null; }
+      if (side === "fluxer") { var a = box.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id"); }
       var ims = box.querySelectorAll("img"); for (var i = 0; i < ims.length; i++) { var m = (ims[i].currentSrc || ims[i].src || "").match(/\/avatars\/(\d{5,25})\//); if (m) return m[1]; }
       return null;
     };
