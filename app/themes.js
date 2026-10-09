@@ -175,6 +175,9 @@
     if (sp != null) out.push(R + " [data-flx='channel.messages.messages-wrapper']{--message-group-spacing:" + sp + "px!important}");
     const fx = new Set(stack.effects || []), L = bgLayer(stack, t, x);
     const grid = R + " [data-flx='channel.channel-view.channel-view-scaffold.channel-grid']:not([data-voice-text-split-view])";
+    // Fluxer pauses every animation while its page isn't focused (inside the app, that's most of the time):
+    // a moving background keeps moving anyway
+    if (L && (L.moving || fx.has("drift"))) out.push(":root:not(#bc-a):not(#bc-b) body::before,:root:not(#bc-a):not(#bc-b) [data-flx='channel.channel-view.channel-view-scaffold.channel-grid']::before{animation-play-state:running!important}");
     const panels = [R + " [data-flx='app.guild-sidebar.guild-navbar']", R + " [data-flx='channel.direct-message.dm-list.dm-list-container']", R + " [data-flx='channel.member-list-container.member-list-container']", R + " [data-flx='channel.member-list-container.member-list-scroller']", R + " [data-flx='app.guilds-layout.user-area-wrapper']"].join(",");
     if (L && fx.has("glass")) { // behind everything, panels see-through
       out.push(R + " body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;" + bgDecl(L) + "}",
