@@ -310,3 +310,10 @@ body.mac #bar{padding:0 12px 0 80px}
 #namebox h2{margin:0;color:var(--strong,#fff);font-size:20px}#namebox p{margin:0;color:var(--dim,#b5bac1)}
 #namebox input{background:var(--bg,#1e1f22);color:var(--strong,#fff);border:1px solid var(--line,#3f4147);border-radius:8px;padding:10px 12px;font:inherit;font-size:15px}
 #namebox input:focus{outline:2px solid var(--accent,#e0301e);outline-offset:0}
+
+/* "Discord first": the two sides swap places (tabs, the double server list, side by side) */
+body[data-flip] #tabs{flex-direction:row-reverse;display:flex}
+body[data-flip] #rail .cols{flex-direction:row-reverse}
+body[data-flip][data-rail=one] #rail .cols{flex-direction:column-reverse}
+body[data-flip][data-mode=both] #discord{left:0;right:auto;width:var(--split)}
+body[data-flip][data-mode=both] #fluxer{left:var(--split);right:0;width:auto}

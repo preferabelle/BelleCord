@@ -881,6 +881,8 @@
 
   // ---------------- app: tray and updates ----------------
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
+  const flip = () => { if (P("flip")) document.body.setAttribute("data-flip", ""); else document.body.removeAttribute("data-flip"); };
+  $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
   async function checkUpdate(loud) {
     if (!host.checkUpdate) return;
     if (loud) $("upd-msg").textContent = "Checking…";
@@ -911,6 +913,7 @@
     setMode(P("mode"), true);
     tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // (in case a site was quicker than your settings)
     setInterval(() => { tick(); if (document.body.dataset.mode === "dash") paintDash(); }, 15000);
+    $("opt-flip").checked = !!P("flip"); flip();
     $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
     $("pilot-name").value = P("pilotName") || "";
     $("pilot-name").onchange = () => { const v = $("pilot-name").value.trim().slice(0, 24); save({ pilotName: v }); toast(v ? "Hi, " + v + "!" : "Name cleared."); };
