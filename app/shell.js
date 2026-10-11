@@ -112,12 +112,16 @@
   for (const name of SIDES) {
     const wv = $("wv-" + name), pane = $(name), fail = pane.querySelector(".fail"), badge = $("b-" + name), net = $("n-" + name);
     wv.addEventListener("page-title-updated", (e) => { const m = String(e.title || "").match(/^\((\d+\+?)\)/); badge.classList.toggle("on", !!m); badge.textContent = m ? m[1] : ""; });
+    const dnsfix = fail.querySelector(".dnsfix");
     wv.addEventListener("did-fail-load", (e) => {
       if (!e.isMainFrame || e.errorCode === -3) return;
-      const offline = /INTERNET|NAME_NOT_RESOLVED|NETWORK/i.test(e.errorDescription);
-      fail.querySelector(".why").textContent = offline ? "Your internet looks off. When it's back, try again." : sideName(name) + " didn't answer (" + e.errorDescription + "). It may be having trouble; try again in a bit.";
-      fail.hidden = false; net.className = "net down"; net.title = offline ? "Your internet is off" : sideName(name) + " isn't answering";
+      const dns = /NAME_NOT_RESOLVED/i.test(e.errorDescription); // the computer's DNS can't find the address
+      const offline = /INTERNET|NETWORK/i.test(e.errorDescription);
+      fail.querySelector(".why").textContent = dns ? sideName(name) + "'s address couldn't be found. This is usually your computer's DNS — “Fix DNS” below looks it up a safer way." : offline ? "Your internet looks off. When it's back, try again." : sideName(name) + " didn't answer (" + e.errorDescription + "). It may be having trouble; try again in a bit.";
+      if (dnsfix) dnsfix.hidden = !dns || !host.fixDns;
+      fail.hidden = false; net.className = "net down"; net.title = dns ? sideName(name) + "'s address can't be found" : offline ? "Your internet is off" : sideName(name) + " isn't answering";
     });
+    if (dnsfix) dnsfix.onclick = async () => { if (!host.fixDns) return; dnsfix.disabled = true; dnsfix.textContent = "Fixing…"; const r = await host.fixDns().catch(() => null); if (r && !r.restarting) { dnsfix.disabled = false; dnsfix.textContent = "Fix DNS"; fail.hidden = true; try { wv.reloadIgnoringCache ? wv.reloadIgnoringCache() : wv.reload(); } catch {} } };
     wv.addEventListener("did-finish-load", () => { fail.hidden = true; net.className = "net"; net.title = "Connected"; });
     // a fresh page: the look goes on again (after anything still on its way, which is taken off first)
     const fresh = async () => { for (const k of [themeKeys[name], fontKeys[name]]) if (k) { try { await wv.removeInsertedCSS(k); } catch {} } themeKeys[name] = null; fontKeys[name] = null; lastCss[name] = ""; lastFont[name] = ""; };
@@ -447,6 +451,7 @@
   }
   // ---- the mini app: how a theme looks before (and after) you pick it ----
   let miniWall = null;
+  let themeQuery = ""; // what's typed in the theme search box
   function mini(stack) {
     const t = T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(curSide()).color) });
     const r = (T.CORNERS[stack.corners] || {}).r ?? 8, F = T.FONTS[stack.font], fx = new Set(stack.effects || []);
@@ -470,7 +475,9 @@
     $("theme-now").textContent = themeNow();
     const mine = (P("myThemes") || []).map((m) => ({ id: "my:" + m.id, name: m.name, blurb: "Yours", pieces: m.pieces, mine: m.id }));
     const all = [...mine, ...T.TEMPLATES];
-    setHtml($("templates"), all.map((tp, i) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join(""));
+    const q = (themeQuery || "").trim().toLowerCase();
+    const shown = q ? all.map((tp, i) => ({ tp, i })).filter(({ tp }) => (tp.name + " " + (tp.blurb || "")).toLowerCase().includes(q)) : all.map((tp, i) => ({ tp, i }));
+    setHtml($("templates"), shown.length ? shown.map(({ tp, i }) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join("") : '<p class="empty">No themes match “' + esc(q) + '”.</p>');
     const asPicked = (tp) => { const p = { ...tp.pieces, effects: [...(tp.pieces.effects || [])] }; if (P("keepColors") && !tp.mine) p.palette = P("theme").palette; return { ...P("theme"), ...p }; };
     $("templates").querySelectorAll(".tpl").forEach((b) => { b.onmouseenter = () => showMini(asPicked(all[Number(b.dataset.i)])); b.onmouseleave = () => showMini(); });
     $("templates").querySelectorAll(".tpl").forEach((b) => (b.onclick = async (e) => {
@@ -483,7 +490,7 @@
     }));
     const rows = T.CATS.map((cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + Object.entries(cat.set).map(([k, o]) => {
       let sw = "";
-      if (cat.key === "palette") { const t = o.own ? fxColors || {} : o; sw = '<span class="sw" style="background:linear-gradient(135deg,' + esc(t.chat || "#555") + " 50%," + esc(t.accent || "#999") + ' 50%)"></span>'; }
+      if (cat.key === "palette") { const t = o.own ? fxColors || {} : o; const fr = esc(t.frame || t.chat || "#555"), ch = esc(t.chat || "#555"), ac = esc(t.accent || "#999"); sw = '<span class="sw sw3" style="background:linear-gradient(135deg,' + fr + " 0 38%," + ch + " 38% 70%," + ac + ' 70%)"></span>'; }
       if (cat.key === "background" && k !== "none" && k !== "wallpaper") { const L = T.bgLayer({ background: k, effects: [] }, T.tokens(stack, { fluxer: fxColors }), {}); sw = '<span class="sw" style="' + esc("background:" + (L ? L.css : "none") + ";background-color:" + T.tokens(stack, { fluxer: fxColors }).chat) + '"></span>'; }
       if (cat.key === "font" && o.stack) return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '" style="font-family:' + esc(o.stack) + '">' + esc(o.name) + "</button>";
       return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '">' + sw + esc(o.name) + "</button>";
@@ -497,6 +504,14 @@
   $("keep-colors").onchange = (e) => save({ keepColors: e.target.checked });
   $("theme-save").onclick = async () => { const name = $("theme-name").value.trim(); if (!name) return toast("Give your theme a name first."); await save({ myThemes: [{ id: uid(), name, pieces: { ...P("theme"), effects: [...(P("theme").effects || [])] } }, ...(P("myThemes") || [])] }); $("theme-name").value = ""; paintStudio(); toast("Saved"); };
   $("theme-reset").onclick = () => setTheme({ ...T.DEFAULT_STACK });
+  $("tpl-search").oninput = (e) => { themeQuery = e.target.value; paintStudio(); };
+  $("theme-surprise").onclick = () => {
+    const pick = (obj, excl) => { const ks = Object.keys(obj).filter((k) => !(excl || []).includes(k)); return ks[Math.floor(Math.random() * ks.length)]; };
+    const pool = Object.keys(T.EFFECTS), chosen = [], n = Math.floor(Math.random() * 3); // 0–2 effects
+    for (let i = 0; i < n && pool.length; i++) chosen.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    setTheme({ palette: pick(T.PALETTES, ["fluxer"]), background: pick(T.BACKGROUNDS, ["wallpaper"]), corners: pick(T.CORNERS), font: pick(T.FONTS), size: pick(T.SIZES), spacing: pick(T.SPACING), effects: chosen });
+    toast("Surprise! Tweak it below, or hit Start over.");
+  };
 
   // ---------------- quick links: TikTok, Pinterest, X, and yours ----------------
   const BUILTIN = [
@@ -535,6 +550,7 @@
   $("pinnote-x").onclick = () => { $("pinnote").hidden = true; save({ pinNoteSeen: true }); };
   // Pinterest: Google's sign-in can't work inside an app. Say so, and how to sign in instead.
   host.onNotice((what) => {
+    if (what === "dns-reload") { for (const n of SIDES) { const v = $("wv-" + n); try { v.reloadIgnoringCache ? v.reloadIgnoringCache() : v.reload(); } catch {} } return; }
     if (!/^pinterest-google/.test(what)) return;
     if (what === "pinterest-google") { // you pressed "Continue with Google"
       if (openId !== "pinterest") togglePanel("pinterest");
@@ -894,6 +910,25 @@
   }
   const doUpdate = async () => { $("updbtn").textContent = "Updating…"; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
+
+  // ---------------- DNS: fixing Fluxer not loading ----------------
+  async function refreshDns() {
+    if (!host.getDns) { const c = $("conncard"); if (c) c.hidden = true; return; }
+    try { const d = await host.getDns(); if ($("opt-securedns")) $("opt-securedns").checked = !!d.secureDns; } catch {}
+  }
+  if ($("dns-fix")) $("dns-fix").onclick = async () => {
+    if (!host.fixDns) return;
+    $("dns-msg").textContent = "Fixing…";
+    const r = await host.fixDns().catch(() => null);
+    if (!r) { $("dns-msg").textContent = "Couldn't do that here."; return; }
+    if (r.restarting) $("dns-msg").textContent = "Turning on secure DNS and restarting…";
+    else { $("dns-msg").textContent = "Refreshed. If Fluxer still won't load, close and open BelleCord once."; toast("DNS refreshed"); }
+  };
+  if ($("opt-securedns")) $("opt-securedns").onchange = async (e) => {
+    if (!host.setDns) return;
+    $("dns-msg").textContent = (e.target.checked ? "Turning on" : "Turning off") + " secure DNS and restarting…";
+    await host.setDns({ secureDns: e.target.checked }).catch(() => {});
+  };
   setTimeout(() => checkUpdate(), 4000); // (on its own, so nothing else at start-up can stop it)
   $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
 
@@ -917,6 +952,6 @@
     $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
     $("pilot-name").value = P("pilotName") || "";
     $("pilot-name").onchange = () => { const v = $("pilot-name").value.trim().slice(0, 24); save({ pilotName: v }); toast(v ? "Hi, " + v + "!" : "Name cleared."); };
-    askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true);
+    askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true); refreshDns();
   })();
 })();

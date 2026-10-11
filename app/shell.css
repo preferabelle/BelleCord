@@ -207,6 +207,10 @@ button.chip:hover{background:var(--raised)}
 .popt{background:var(--side);color:var(--text);font-size:13px;padding:6px 10px;display:inline-flex;align-items:center;gap:6px;border:1px solid transparent}
 .popt:hover{border-color:var(--line);filter:none}.popt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--side))}
 .popt .sw{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+.popt .sw.sw3{width:20px;border-radius:4px}
+.tplsearch{margin-left:auto;font-size:12px;padding:4px 9px;max-width:180px}
+h3.sub .keep{margin-left:10px}
+#theme-surprise{background:color-mix(in srgb,var(--accent) 22%,var(--raised))}
 .lk{display:flex;align-items:center;gap:8px;padding:6px 0}.lk b{width:24px;text-align:center}.lk span{flex:1;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lk button{padding:3px 9px}
 #linklist{margin-bottom:10px}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#111214;color:#f2f3f5;padding:9px 14px;border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;max-width:70vw}
@@ -277,6 +281,13 @@ body.mac #bar{padding:0 12px 0 80px}
 #updbtn{background:#23a55a;color:#fff;font-weight:700;font-size:12px;padding:3px 12px}
 #updbtn[hidden]{display:none}
 .appcard{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.conncard{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.conncard .conntext b{color:var(--strong)}
+.conncard .row{align-items:center}
+#dns-msg:empty{display:none}
+.fail .failbtns{justify-content:center;margin-top:4px}
+.fail .dnsfix{background:#23a55a;color:#fff}
+.fail .dnsfix[hidden]{display:none}
 /* the mini app in the theme studio */
 .mini{position:sticky;top:0;z-index:3;margin:0 0 12px;padding:10px 0;background:var(--main)}
 .mapp{position:relative;height:230px;border-radius:10px;overflow:hidden;display:grid;grid-template-columns:44px 150px 1fr 130px;background:var(--mf);font-family:var(--mfont,inherit);color:var(--mt);border:1px solid var(--line)}

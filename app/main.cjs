@@ -53,6 +53,39 @@ ipcMain.handle("img:set", (e, key, data) => {
 });
 ipcMain.handle("notify", (e, { title, body }) => { try { if (Notification.isSupported()) new Notification({ title: String(title || NAME), body: String(body || ""), ...withIcon() }).show(); } catch {} });
 ipcMain.handle("open-external", (e, url) => { if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url)); });
+
+// ---- DNS: Fluxer sometimes won't load because the computer's DNS can't find web.fluxer.app (some home
+// routers, some ISPs and some ad-blocking DNS return "not found" for it, or keep a stale "not found" cached).
+// "Secure DNS" makes BelleCord look names up itself over an encrypted connection to Cloudflare, around the
+// broken one. The setting is applied once at start-up (Chromium only lets us set it once), so turning it on or
+// off restarts the app. The "Fix DNS" button also forgets any stale "not found" that's cached.
+const DOH = { cloudflare: "https://cloudflare-dns.com/dns-query", google: "https://dns.google/dns-query" };
+function dnsServer() { const k = String(readPrefs().dohProvider || "cloudflare"); return DOH[k] || DOH.cloudflare; }
+let secureDnsApplied = false;
+function applySecureDns() {
+  if (secureDnsApplied || !readPrefs().secureDns) return;
+  try { app.configureHostResolver({ secureDnsMode: "secure", secureDnsServers: [dnsServer()] }); secureDnsApplied = true; } catch (e) { try { console.error("secure DNS:", e?.message || e); } catch {} }
+}
+async function clearDnsCache() { for (const p of ["", ...PARTS]) { try { await (p ? session.fromPartition(p) : session.defaultSession).clearHostResolverCache(); } catch {} } }
+ipcMain.handle("dns:get", () => ({ secureDns: !!readPrefs().secureDns, applied: secureDnsApplied, provider: String(readPrefs().dohProvider || "cloudflare") }));
+ipcMain.handle("dns:set", async (e, changes) => {
+  const was = !!readPrefs().secureDns, wasP = String(readPrefs().dohProvider || "cloudflare");
+  const next = changes && typeof changes === "object" ? changes : {};
+  writePrefs({ ...(typeof next.secureDns === "boolean" ? { secureDns: next.secureDns } : {}), ...(next.provider && DOH[next.provider] ? { dohProvider: next.provider } : {}) });
+  const nowOn = !!readPrefs().secureDns, nowP = String(readPrefs().dohProvider || "cloudflare");
+  // turning secure DNS on/off, or changing provider while it's on, only takes effect after a restart
+  const needRestart = nowOn !== was || (nowOn && nowP !== wasP);
+  if (needRestart) { flushAll(); setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 250); }
+  return { secureDns: nowOn, provider: nowP, restarting: needRestart };
+});
+ipcMain.handle("dns:fix", async () => {
+  await clearDnsCache();
+  // if secure DNS isn't on yet, turn it on and restart with it (the reliable fix); otherwise just forget the
+  // stale "not found" and reload the two sites
+  if (!readPrefs().secureDns) { writePrefs({ secureDns: true }); flushAll(); setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 250); return { restarting: true, secureDns: true }; }
+  try { if (win && !win.isDestroyed()) win.webContents.send("notice", "dns-reload"); } catch {}
+  return { restarting: false, secureDns: true, refreshed: true };
+});
 // ---- game badges: everyone's badges live on the badge hub (its address is in hub.json next to this file) ----
 function hubAddress() {
   try { const a = String(JSON.parse(fs.readFileSync(path.join(__dirname, "hub.json"), "utf-8")).address || "").trim().replace(/\/+$/, ""); if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(a) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(a)) return a; } catch {}
@@ -239,6 +272,7 @@ function open() {
 app.whenReady().then(() => {
   // Mac: the menu bar (copy, paste, undo and quitting need it there)
   if (MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]));
+  applySecureDns(); // (if you turned it on: look names up over Cloudflare, around a broken local DNS)
   setUp(session.defaultSession);
   for (const p of PARTS) setUp(session.fromPartition(p));
   makeTray();
