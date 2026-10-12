@@ -38,6 +38,30 @@
   };
 
   // ---------------- backgrounds (drawn behind the chat; behind everything with the Glass effect) ----------------
+  // Rain: drops at three depths. Far drops are small, dim and slow; near drops are long, bright and fast. Every drop
+  // has a tile of its own (no two the same size, so the drops never line up in rows), and every loop slides each
+  // tile straight down by a whole number of tiles, so the rain never jumps when the loop starts over.
+  const RAIN = (() => {
+    const depths = [
+      { fall: 400, r: [0.7, 8], s: 34, drops: [[113, 197, 31, 22], [149, 131, 72, 61], [181, 101, 14, 77], [223, 163, 55, 40], [89, 233, 83, 9]] },
+      { fall: 800, r: [1, 13], s: 46, drops: [[137, 271, 18, 64], [167, 211, 66, 27], [199, 307, 41, 83], [241, 239, 89, 46], [103, 359, 7, 15]] },
+      { fall: 1400, r: [1.4, 21], s: 60, drops: [[271, 383, 24, 33], [211, 457, 71, 70], [157, 419, 52, 8], [317, 347, 88, 56]] },
+    ];
+    const drops = [];
+    depths.forEach((d) => d.drops.forEach(([w, h, x, y]) => drops.push({ w, h, x, y, r: d.r, s: d.s, to: h * Math.max(1, Math.round(d.fall / h)) })));
+    return {
+      name: "Rain",
+      css: (t) => {
+        const c = (p) => "color-mix(in srgb,color-mix(in srgb," + (t.link || t.accent || "#8fc0ff") + " 40%," + (t.strong || "#ffffff") + ") " + Math.round(p) + "%,transparent)";
+        return drops.map((d) => "radial-gradient(" + d.r[0] + "px " + d.r[1] + "px at " + d.x + "% " + d.y + "%," + c(d.s) + "," + c(d.s * 0.45) + " 55%,transparent)").join(",") +
+          ",linear-gradient(180deg," + c(5) + ",transparent 40%,transparent 65%," + mix(t.accent || "#8fc0ff", 8) + ")";
+      },
+      size: drops.map((d) => d.w + "px " + d.h + "px").join(",") + ",100% 100%",
+      moving: true,
+      anim: "bcRain 2.2s linear infinite",
+      keyframes: "@keyframes bcRain{from{background-position:" + drops.map(() => "0 0").join(",") + ",0 0}to{background-position:" + drops.map((d) => "0 " + d.to + "px").join(",") + ",0 0}}",
+    };
+  })();
   const BACKGROUNDS = {
     none: { name: "None", css: () => "" },
     wallpaper: { name: "Your skin's wallpaper", css: (t, x) => (x.wall ? 'url("' + x.wall + '") center/cover no-repeat' : "") },
@@ -52,7 +76,7 @@
     aurora: { name: "Aurora", css: () => "linear-gradient(125deg,#0b1d3a,#11506b,#2b6b5f,#5b3f8c,#8a2f6b,#0b1d3a)", size: "400% 400%", moving: true },
     bokeh: { name: "Bokeh", css: (t) => "radial-gradient(22px 22px at 18% 28%," + mix(t.accent, 22) + ",transparent 70%),radial-gradient(34px 34px at 72% 20%," + mix(t.link, 16) + ",transparent 70%),radial-gradient(16px 16px at 40% 66%," + mix(t.accent, 26) + ",transparent 70%),radial-gradient(44px 44px at 86% 74%," + mix(t.link, 14) + ",transparent 70%),radial-gradient(14px 14px at 26% 86%," + mix(t.accent, 20) + ",transparent 70%)", size: "320px 320px" },
     honeycomb: { name: "Honeycomb", css: (t) => "radial-gradient(circle at 50% 0," + mix(t.accent, 10) + " 0 9px,transparent 10px),radial-gradient(circle at 0 50%," + mix(t.accent, 10) + " 0 9px,transparent 10px),radial-gradient(circle at 100% 50%," + mix(t.accent, 10) + " 0 9px,transparent 10px),radial-gradient(circle at 50% 100%," + mix(t.accent, 10) + " 0 9px,transparent 10px)", size: "48px 48px" },
-    rain: { name: "Rain", css: (t) => "repeating-linear-gradient(104deg," + mix(t.link, 0) + " 0 7px," + mix(t.link, 14) + " 7px 8px," + mix(t.link, 0) + " 8px 15px),linear-gradient(180deg,transparent," + mix(t.accent, 8) + ")", size: "90px 90px" },
+    rain: RAIN,
     mesh: { name: "Mesh", css: (t) => "radial-gradient(40% 50% at 18% 22%," + mix(t.accent, 26) + ",transparent 70%),radial-gradient(45% 55% at 82% 28%," + mix(t.link, 22) + ",transparent 70%),radial-gradient(50% 55% at 30% 82%," + mix(t.link, 18) + ",transparent 70%),radial-gradient(45% 50% at 78% 80%," + mix(t.accent, 22) + ",transparent 70%)", size: "240% 240%", moving: true },
   };
   const mix = (c, pct) => "color-mix(in srgb," + c + " " + pct + "%,transparent)";
@@ -141,19 +165,20 @@
     const b = BACKGROUNDS[stack.background] || BACKGROUNDS.none;
     const css = b.css(t, x);
     if (!css) return null;
-    return { css, size: b.size || "", moving: !!(b.moving || (stack.effects || []).includes("drift")), wall: stack.background === "wallpaper", strength: x.strength, blur: x.blur };
+    return { css, size: b.size || "", anim: b.anim || "", moving: !!(b.moving || (stack.effects || []).includes("drift")), wall: stack.background === "wallpaper", strength: x.strength, blur: x.blur };
   };
   // moving backgrounds: a tiled pattern (like Damask) slides by exactly one tile and loops; anything else is
   // made a bit bigger than its box and pans slowly back and forth (a background exactly as big as its box
   // has nowhere to move, which is why "Moving background" did nothing before)
   const moveOf = (L) => {
     if (!L || !L.moving) return null;
+    if (L.anim) return { size: L.size, anim: L.anim }; // a background with its own motion (Rain falls)
     const px = String(L.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/);
     if (px) { const w = +px[1], h = +(px[2] || px[1]); return { size: L.size, anim: "bcDriftT" + w + "x" + h + " " + Math.max(8, Math.round(w / 5)) + "s linear infinite" }; }
     return { size: /%/.test(L.size || "") ? L.size : "160% 160%", anim: "bcDrift 40s ease-in-out infinite alternate" };
   };
   const bgDecl = (L) => { const m = moveOf(L); return "background:" + L.css + ";" + (m ? "background-size:" + m.size + "!important;animation:" + m.anim + "!important;animation-play-state:running!important" : L.size ? "background-size:" + L.size : "") + (L.wall ? ";opacity:" + (Math.max(4, Math.min(80, Number(L.strength) || 30)) / 100).toFixed(2) + (L.blur ? ";filter:blur(" + L.blur + "px)" : "") : ""); };
-  const KEYFRAMES = "@keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}" + Object.values(BACKGROUNDS).map((b) => { const m = String(b.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/); if (!m) return ""; const w = +m[1], h = +(m[2] || m[1]); return "@keyframes bcDriftT" + w + "x" + h + "{from{background-position:0 0}to{background-position:" + w * 2 + "px " + h + "px}}"; }).join("");
+  const KEYFRAMES = "@keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}" + Object.values(BACKGROUNDS).map((b) => { if (b.keyframes) return b.keyframes; const m = String(b.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/); if (!m) return ""; const w = +m[1], h = +(m[2] || m[1]); return "@keyframes bcDriftT" + w + "x" + h + "{from{background-position:0 0}to{background-position:" + w * 2 + "px " + h + "px}}"; }).join("");
 
   // ---------------- Fluxer ----------------
   // the selected channel row (its classes, as Fluxer's build names them)
@@ -328,5 +353,19 @@
     return out;
   }.toString() + ")()";
 
-  window.bcThemes = { PALETTES, BACKGROUNDS, CORNERS, FONTS, SIZES, SPACING, EFFECTS, CATS, TEMPLATES, DEFAULT_STACK, tokens, fluxerCss, discordCss, shellVars, READ_FLUXER_COLORS, bgLayer, bgDecl, mix, KEYFRAMES };
+  // the colors, organized: "Fluxer's own" first, then the dark ones, then the light ones, each group in color order
+  // (grays, reds, oranges and browns, greens, blues, purples, pinks). A color's family is its background's tint, or
+  // its accent's when the background is plain gray.
+  const PALETTE_GROUPS = (() => {
+    const rgb = (h) => { const m = String(h || "").match(/^#([0-9a-f]{6})$/i); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+    const chroma = (c) => Math.max(...c) - Math.min(...c);
+    const hueOf = (c) => { const [r, g, b] = c.map((x) => x / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!d) return 0; return 60 * (mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4); };
+    const family = (p) => { const bg = rgb(p.chat), ac = rgb(p.accent); if (bg && chroma(bg) >= 10) return (hueOf(bg) + 15) % 360; if (ac && chroma(ac) >= 40) return (hueOf(ac) + 15) % 360; return -1; };
+    const out = { own: [], dark: [], light: [] };
+    for (const [k, p] of Object.entries(PALETTES)) (p.own ? out.own : p.dark === false ? out.light : out.dark).push(k);
+    for (const g of ["dark", "light"]) out[g].sort((a, b) => family(PALETTES[a]) - family(PALETTES[b]));
+    return out;
+  })();
+
+  window.bcThemes = { PALETTES, PALETTE_GROUPS, BACKGROUNDS, CORNERS, FONTS, SIZES, SPACING, EFFECTS, CATS, TEMPLATES, DEFAULT_STACK, tokens, fluxerCss, discordCss, shellVars, READ_FLUXER_COLORS, bgLayer, bgDecl, mix, KEYFRAMES };
 })();

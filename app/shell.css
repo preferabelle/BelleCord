@@ -284,10 +284,37 @@ body.mac #bar{padding:0 12px 0 80px}
 .conncard{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .conncard .conntext b{color:var(--strong)}
 .conncard .row{align-items:center}
-#dns-msg:empty{display:none}
+#fx-msg:empty{display:none}
 .fail .failbtns{justify-content:center;margin-top:4px}
-.fail .dnsfix{background:#23a55a;color:#fff}
-.fail .dnsfix[hidden]{display:none}
+.fail .fxfix{position:absolute;right:14px;bottom:14px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:color-mix(in srgb,var(--bg) 75%,transparent);color:var(--dim);box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.fail .fxfix:hover{color:var(--strong);filter:none;background:var(--bg)}
+#conncard.flash{animation:fxflash 1.8s ease}@keyframes fxflash{0%,100%{box-shadow:0 0 0 0 transparent}15%,55%{box-shadow:0 0 0 3px var(--accent)}}
+/* theme studio: the pre-made themes fold away; the colors come in groups */
+.tplwrap{margin:0 0 14px;padding:12px;border-radius:var(--r);background:color-mix(in srgb,var(--side) 60%,var(--main))}.tplwrap[hidden]{display:none}
+.tplbar{margin-bottom:10px}.tplbar .tplsearch{margin-left:0}
+#tpl-toggle.on{box-shadow:inset 0 -2px 0 var(--accent)}
+.popts .pgrp{display:flex;gap:6px;align-items:flex-start;width:100%}.popts .pgrp+.pgrp{margin-top:2px}
+.popts .pgl{width:44px;flex:none;padding-top:8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.popts .pbtns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.fail .fxfix[hidden]{display:none}
+/* the Fix Fluxer window */
+#fxmodal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
+#fxmodal .fxbox{width:min(560px,96vw);max-height:88vh;overflow:auto;background:var(--bg);color:var(--text);border-radius:calc(var(--r) * 1.4);box-shadow:0 18px 60px rgba(0,0,0,.55);border-top:3px solid var(--accent)}
+#fxmodal .fxhd{padding:18px 20px 6px;display:flex;align-items:center;gap:12px}#fxmodal .fxhd h2{margin:0;font-size:19px;color:var(--strong);flex:1}
+#fxmodal .fxx{background:transparent;color:var(--dim);font-size:16px;padding:4px 8px}#fxmodal .fxx:hover{color:var(--strong)}
+#fxmodal .fxhead{padding:0 20px 8px;font-size:14px;color:var(--dim)}#fxmodal .fxhead.good{color:#23a55a}#fxmodal .fxhead.bad{color:#f0b232}
+#fxmodal ol{list-style:none;margin:6px 0 0;padding:0 20px 6px}
+#fxmodal li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.35}
+#fxmodal li .i{width:20px;flex:none;text-align:center;font-weight:800}#fxmodal li .d{display:block;font-size:12px;color:var(--dim);white-space:pre-wrap;margin-top:2px}
+#fxmodal li.ok .i,#fxmodal li.fixed .i{color:#23a55a}#fxmodal li.warn .i{color:#f0b232}#fxmodal li.fail .i{color:#f23f43}#fxmodal li.skip{opacity:.6}
+#fxmodal li.run .i::before{content:"";display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:fxspin .8s linear infinite}
+@keyframes fxspin{to{transform:rotate(360deg)}}
+#fxmodal .fxtodo{margin:10px 20px 4px;padding:12px 14px;background:var(--side);border-radius:calc(var(--r) * .8);border-left:3px solid #f0b232}#fxmodal .fxtodo b{color:var(--strong);font-size:13px}
+#fxmodal .fxtodo p{margin:8px 0 0;font-size:13px;line-height:1.45}#fxmodal .fxtodo button{margin-top:6px}
+#fxmodal .fxtech{margin:8px 20px 0;padding:10px;border-radius:calc(var(--r) * .6);background:var(--side);font:11px/1.45 Consolas,monospace;color:var(--dim);white-space:pre-wrap;display:none}#fxmodal .fxtech.on{display:block}
+#fxmodal .fxft{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;padding:14px 20px 18px}
+#fxmodal .fxft .ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--text)}
+#fxmodal button.danger{background:#da373c;color:#fff}#fxmodal button[disabled]{opacity:.6;cursor:default;filter:none}
 /* the mini app in the theme studio */
 .mini{position:sticky;top:0;z-index:3;margin:0 0 12px;padding:10px 0;background:var(--main)}
 .mapp{position:relative;height:230px;border-radius:10px;overflow:hidden;display:grid;grid-template-columns:44px 150px 1fr 130px;background:var(--mf);font-family:var(--mfont,inherit);color:var(--mt);border:1px solid var(--line)}

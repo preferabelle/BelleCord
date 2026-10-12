@@ -112,16 +112,17 @@
   for (const name of SIDES) {
     const wv = $("wv-" + name), pane = $(name), fail = pane.querySelector(".fail"), badge = $("b-" + name), net = $("n-" + name);
     wv.addEventListener("page-title-updated", (e) => { const m = String(e.title || "").match(/^\((\d+\+?)\)/); badge.classList.toggle("on", !!m); badge.textContent = m ? m[1] : ""; });
-    const dnsfix = fail.querySelector(".dnsfix");
+    const fxfix = fail.querySelector(".fxfix"); // (the Fluxer side's "Fix Fluxer" button)
     wv.addEventListener("did-fail-load", (e) => {
       if (!e.isMainFrame || e.errorCode === -3) return;
       const dns = /NAME_NOT_RESOLVED/i.test(e.errorDescription); // the computer's DNS can't find the address
       const offline = /INTERNET|NETWORK/i.test(e.errorDescription);
-      fail.querySelector(".why").textContent = dns ? sideName(name) + "'s address couldn't be found. This is usually your computer's DNS — “Fix DNS” below looks it up a safer way." : offline ? "Your internet looks off. When it's back, try again." : sideName(name) + " didn't answer (" + e.errorDescription + "). It may be having trouble; try again in a bit.";
-      if (dnsfix) dnsfix.hidden = !dns || !host.fixDns;
+      const canFix = !!(fxfix && host.fixFluxer);
+      fail.querySelector(".why").textContent = offline ? "Your internet looks off. When it's back, try again." : (dns ? sideName(name) + "'s address couldn't be found from this computer." : sideName(name) + " didn't answer (" + e.errorDescription + ").") + (canFix ? " “Fix Fluxer” finds out why, and fixes what it can." : dns ? " This is usually your computer's DNS." : " It may be having trouble; try again in a bit.");
+      if (fxfix) fxfix.hidden = !canFix;
       fail.hidden = false; net.className = "net down"; net.title = dns ? sideName(name) + "'s address can't be found" : offline ? "Your internet is off" : sideName(name) + " isn't answering";
     });
-    if (dnsfix) dnsfix.onclick = async () => { if (!host.fixDns) return; dnsfix.disabled = true; dnsfix.textContent = "Fixing…"; const r = await host.fixDns().catch(() => null); if (r && !r.restarting) { dnsfix.disabled = false; dnsfix.textContent = "Fix DNS"; fail.hidden = true; try { wv.reloadIgnoringCache ? wv.reloadIgnoringCache() : wv.reload(); } catch {} } };
+    if (fxfix) fxfix.onclick = () => goToFixFluxer();
     wv.addEventListener("did-finish-load", () => { fail.hidden = true; net.className = "net"; net.title = "Connected"; });
     // a fresh page: the look goes on again (after anything still on its way, which is taken off first)
     const fresh = async () => { for (const k of [themeKeys[name], fontKeys[name]]) if (k) { try { await wv.removeInsertedCSS(k); } catch {} } themeKeys[name] = null; fontKeys[name] = null; lastCss[name] = ""; lastFont[name] = ""; };
@@ -470,6 +471,9 @@
   function showMini(stack) { setHtml($("mini"), mini(stack || P("theme"))); }
   function paintStudio() {
     const stack = P("theme");
+    { const open = !!P("tplOpen"), n = (P("myThemes") || []).length, tb = $("tpl-toggle"), w = $("tplwrap");
+      if (w) w.hidden = !open;
+      if (tb) { tb.textContent = "🎨 " + (n ? "Saved & pre-made themes" : "Pre-made themes") + (open ? " ▾" : " ▸"); tb.classList.toggle("on", open); tb.setAttribute("aria-expanded", String(open)); } }
     showMini(stack);
     ctxFor(curSide()).then((x) => { if (x.wall !== miniWall) { miniWall = x.wall; showMini(); } });
     $("theme-now").textContent = themeNow();
@@ -488,13 +492,17 @@
       await setTheme(pieces);
       toast(tp.name);
     }));
-    const rows = T.CATS.map((cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + Object.entries(cat.set).map(([k, o]) => {
+    const optOf = (cat, k, o) => {
       let sw = "";
       if (cat.key === "palette") { const t = o.own ? fxColors || {} : o; const fr = esc(t.frame || t.chat || "#555"), ch = esc(t.chat || "#555"), ac = esc(t.accent || "#999"); sw = '<span class="sw sw3" style="background:linear-gradient(135deg,' + fr + " 0 38%," + ch + " 38% 70%," + ac + ' 70%)"></span>'; }
       if (cat.key === "background" && k !== "none" && k !== "wallpaper") { const L = T.bgLayer({ background: k, effects: [] }, T.tokens(stack, { fluxer: fxColors }), {}); sw = '<span class="sw" style="' + esc("background:" + (L ? L.css : "none") + ";background-color:" + T.tokens(stack, { fluxer: fxColors }).chat) + '"></span>'; }
       if (cat.key === "font" && o.stack) return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '" style="font-family:' + esc(o.stack) + '">' + esc(o.name) + "</button>";
       return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '">' + sw + esc(o.name) + "</button>";
-    }).join("") + "</div></div>").join("") +
+    };
+    // the colors come in groups: Fluxer's own, then darks, then lights (each in color order, see themes.js)
+    const group = (cat, label, keys) => (keys.length ? '<div class="pgrp"><span class="pgl">' + label + '</span><div class="pbtns">' + keys.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" : "");
+    const paletteOpts = (cat) => group(cat, "", T.PALETTE_GROUPS.own) + group(cat, "Dark", T.PALETTE_GROUPS.dark) + group(cat, "Light", T.PALETTE_GROUPS.light);
+    const rows = T.CATS.map((cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + (cat.key === "palette" && T.PALETTE_GROUPS ? paletteOpts(cat) : Object.entries(cat.set).map(([k, o]) => optOf(cat, k, o)).join("")) + "</div></div>").join("") +
       '<div class="prow"><b>Effects</b><div class="popts">' + Object.entries(T.EFFECTS).map(([k, o]) => '<button class="popt' + ((stack.effects || []).includes(k) ? " on" : "") + '" data-fx="' + k + '" title="' + esc(o.hint) + '">' + esc(o.name) + "</button>").join("") + "</div></div>";
     setHtml($("pieces"), rows);
     $("pieces").querySelectorAll("[data-cat]").forEach((b) => { b.onclick = () => setTheme({ [b.dataset.cat]: b.dataset.k }); b.onmouseenter = () => showMini({ ...P("theme"), [b.dataset.cat]: b.dataset.k }); b.onmouseleave = () => showMini(); });
@@ -502,6 +510,7 @@
     $("pieces").querySelectorAll("[data-fx]").forEach((b) => (b.onclick = () => { const fx = new Set(P("theme").effects || []); fx.has(b.dataset.fx) ? fx.delete(b.dataset.fx) : fx.add(b.dataset.fx); setTheme({ effects: [...fx] }); }));
   }
   $("keep-colors").onchange = (e) => save({ keepColors: e.target.checked });
+  if ($("tpl-toggle")) $("tpl-toggle").onclick = async () => { await save({ tplOpen: !P("tplOpen") }); paintStudio(); };
   $("theme-save").onclick = async () => { const name = $("theme-name").value.trim(); if (!name) return toast("Give your theme a name first."); await save({ myThemes: [{ id: uid(), name, pieces: { ...P("theme"), effects: [...(P("theme").effects || [])] } }, ...(P("myThemes") || [])] }); $("theme-name").value = ""; paintStudio(); toast("Saved"); };
   $("theme-reset").onclick = () => setTheme({ ...T.DEFAULT_STACK });
   $("tpl-search").oninput = (e) => { themeQuery = e.target.value; paintStudio(); };
@@ -550,7 +559,6 @@
   $("pinnote-x").onclick = () => { $("pinnote").hidden = true; save({ pinNoteSeen: true }); };
   // Pinterest: Google's sign-in can't work inside an app. Say so, and how to sign in instead.
   host.onNotice((what) => {
-    if (what === "dns-reload") { for (const n of SIDES) { const v = $("wv-" + n); try { v.reloadIgnoringCache ? v.reloadIgnoringCache() : v.reload(); } catch {} } return; }
     if (!/^pinterest-google/.test(what)) return;
     if (what === "pinterest-google") { // you pressed "Continue with Google"
       if (openId !== "pinterest") togglePanel("pinterest");
@@ -911,24 +919,98 @@
   const doUpdate = async () => { $("updbtn").textContent = "Updating…"; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
 
-  // ---------------- DNS: fixing Fluxer not loading ----------------
-  async function refreshDns() {
-    if (!host.getDns) { const c = $("conncard"); if (c) c.hidden = true; return; }
-    try { const d = await host.getDns(); if ($("opt-securedns")) $("opt-securedns").checked = !!d.secureDns; } catch {}
+  // ---------------- Fix Fluxer: one button for whatever keeps Fluxer from working ----------------
+  // On the dashboard (App) and on the "Couldn't reach Fluxer" screen. It checks first, then fixes what an app can fix
+  // (old lookups and stuck connections, a broken saved copy of Fluxer, DNS that can't find Fluxer, a hosts-file line
+  // that blocks it, a proxy, Fluxer's move to fluxer.com), reloads Fluxer, checks the page really came up, and says
+  // plainly what's left for you (a VPN like Cloudflare WARP, a wrong clock, Fluxer itself being down).
+  const FX_ICON = { run: "", ok: "✓", fixed: "✓", warn: "!", fail: "✕", skip: "–" };
+  let fxRunning = false;
+  function fxModal() {
+    let m = $("fxmodal");
+    if (m) return m;
+    m = document.createElement("div"); m.id = "fxmodal";
+    m.innerHTML = '<div class="fxbox" role="dialog" aria-label="Fix Fluxer"><div class="fxhd"><h2>Fix Fluxer</h2><button class="fxx" title="Close">✕</button></div><div class="fxhead"></div><ol></ol><div class="fxtodos"></div><pre class="fxtech"></pre><div class="fxft"></div></div>';
+    m.querySelector(".fxx").onclick = () => { if (!fxRunning) m.remove(); };
+    m.addEventListener("click", (e) => { if (e.target === m && !fxRunning) m.remove(); });
+    document.body.appendChild(m);
+    return m;
   }
-  if ($("dns-fix")) $("dns-fix").onclick = async () => {
-    if (!host.fixDns) return;
-    $("dns-msg").textContent = "Fixing…";
-    const r = await host.fixDns().catch(() => null);
-    if (!r) { $("dns-msg").textContent = "Couldn't do that here."; return; }
-    if (r.restarting) $("dns-msg").textContent = "Turning on secure DNS and restarting…";
-    else { $("dns-msg").textContent = "Refreshed. If Fluxer still won't load, close and open BelleCord once."; toast("DNS refreshed"); }
-  };
-  if ($("opt-securedns")) $("opt-securedns").onchange = async (e) => {
-    if (!host.setDns) return;
-    $("dns-msg").textContent = (e.target.checked ? "Turning on" : "Turning off") + " secure DNS and restarting…";
-    await host.setDns({ secureDns: e.target.checked }).catch(() => {});
-  };
+  function fxStep(m, st) {
+    const ol = m.querySelector("ol");
+    let li = [...ol.children].find((x) => x.dataset.id === st.id);
+    if (!li) { li = document.createElement("li"); li.dataset.id = st.id; ol.appendChild(li); }
+    li.className = st.status || "run";
+    li.innerHTML = '<span class="i">' + (FX_ICON[st.status] ?? "") + "</span><span>" + esc(st.label) + (st.detail ? '<span class="d">' + esc(st.detail) + "</span>" : "") + "</span>";
+  }
+  function fxPaintCard(r) {
+    const el = $("fx-msg"); if (!el) return;
+    el.textContent = !r ? "" : r.restartNeeded ? "Last check: restart BelleCord to finish the fix." : r.ok ? "Last check: Fluxer was working." : "Last check: Fluxer still had trouble — press Fix Fluxer to see what's left.";
+  }
+  async function fixFluxer() {
+    if (fxRunning) { fxModal(); return; }
+    if (!host.fixFluxer) { toast("Fix Fluxer needs BelleCord's newest version: close BelleCord completely and open it again.", 6000); return; }
+    fxRunning = true;
+    const m = fxModal();
+    m.querySelector("ol").innerHTML = ""; m.querySelector(".fxtodos").innerHTML = ""; m.querySelector(".fxft").innerHTML = ""; m.querySelector(".fxtech").textContent = "";
+    const head = m.querySelector(".fxhead");
+    head.className = "fxhead"; head.textContent = "Looking at what's wrong, then fixing what can be fixed. This takes up to a minute.";
+    let report = null;
+    try { report = await host.fixFluxer(); } catch (e) { fxStep(m, { id: "app", label: "Fix Fluxer stopped: " + (e.message || e), status: "fail" }); }
+    fxRunning = false;
+    if (report) for (const st of report.steps || []) fxStep(m, st);
+    const fixedSomething = !!report && (report.steps || []).some((x) => x.status === "fixed");
+    if (report && report.restartNeeded) { head.className = "fxhead bad"; head.textContent = "Almost there — restart BelleCord to finish."; }
+    else if (report && report.ok) { head.className = "fxhead good"; head.textContent = fixedSomething ? "Fluxer should be working now. ✓" : "Everything checks out — Fluxer is working. ✓"; }
+    else { head.className = "fxhead bad"; head.textContent = report ? "Fluxer still isn't working from this computer — here's what's left:" : "Close BelleCord completely, open it again, then press Fix Fluxer again."; }
+    // what's left for you
+    const todos = (report && report.youDo) || [];
+    const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()] };
+    m.querySelector(".fxtodos").innerHTML = todos.length ? '<div class="fxtodo"><b>What you need to do</b>' + todos.map((t, i) => "<p>" + esc(t.text) + (t.action && ACT[t.action] ? '<br><button data-act="' + i + '">' + esc(ACT[t.action][0]) + "</button>" : "") + "</p>").join("") + "</div>" : "";
+    m.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { const t = todos[Number(b.dataset.act)]; try { ACT[t.action][1](); } catch {} }));
+    // the details (for a screenshot to Belle)
+    m.querySelector(".fxtech").textContent = (report && report.tech) || "No details (Fix Fluxer didn't run).";
+    const ft = m.querySelector(".fxft");
+    const btn = (label, cls, fn) => { const b = document.createElement("button"); if (cls) b.className = cls; b.textContent = label; b.onclick = fn; ft.appendChild(b); return b; };
+    btn("Details", "ghost", () => m.querySelector(".fxtech").classList.toggle("on"));
+    btn("Copy details", "ghost", async (e) => { try { await navigator.clipboard.writeText(m.querySelector(".fxtech").textContent); e.target.textContent = "Copied ✓"; } catch { m.querySelector(".fxtech").classList.add("on"); } });
+    if (host.fluxerClean && !todos.some((t) => t.action === "clean")) btn("Open Fluxer in a clean window", "", () => host.fluxerClean());
+    if (host.fluxerReset) {
+      const r = btn("Sign out & start fresh", "", async () => {
+        if (!r.dataset.sure) { r.dataset.sure = "1"; r.textContent = "Really? This signs you out of Fluxer here — click again"; r.classList.add("danger"); setTimeout(() => { if (r.isConnected) { delete r.dataset.sure; r.textContent = "Sign out & start fresh"; r.classList.remove("danger"); } }, 5000); return; }
+        r.disabled = true; r.textContent = "Starting fresh…";
+        await host.fluxerReset().catch(() => {});
+        r.textContent = "Done — sign in to Fluxer again";
+      });
+    }
+    if (report && report.restartNeeded && host.restartApp) btn("Restart BelleCord", "primary", () => host.restartApp());
+    else btn("Done", "primary", () => m.remove());
+    fxPaintCard(report);
+    // the Fluxer side's "Couldn't reach Fluxer" screen goes away once Fluxer is back
+    if (report && report.ok) { const f = $("fluxer") && $("fluxer").querySelector(".fail"); if (f) f.hidden = true; }
+  }
+  // takes you to Fix Fluxer on the dashboard and points at it
+  function goToFixFluxer() {
+    setMode("dash");
+    let tries = 0;
+    (function look() {
+      const c = $("conncard");
+      if (c && c.offsetParent !== null) { try { c.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {} c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash"); return; }
+      if (++tries < 40) setTimeout(look, 100);
+    })();
+  }
+  if (host.onFluxerProgress) host.onFluxerProgress((st) => { const m = $("fxmodal"); if (m && fxRunning && st && st.id) fxStep(m, st); });
+  if ($("fx-fix")) $("fx-fix").onclick = () => fixFluxer();
+  async function fxInit() {
+    if (!host.fixFluxer) { const c = $("conncard"); if (c) c.hidden = true; return; }
+    try { const last = host.fluxerLast ? await host.fluxerLast() : null; if (last && last.at) fxPaintCard({ ok: !!last.ok }); } catch {}
+    // Fix Fluxer found web.fluxer.app not answering and moved you to fluxer.com: Fluxer opens there from now on
+    try {
+      const home = String((host.fluxerHome && (await host.fluxerHome())) || "").replace(/\/+$/, "");
+      const wv = $("wv-fluxer");
+      if (home === "https://fluxer.com" && wv && !/^https:\/\/([a-z0-9-]+\.)*fluxer\.com\//i.test(wv.getAttribute("src") || "")) wv.setAttribute("src", home + "/channels/@me");
+    } catch {}
+  }
   setTimeout(() => checkUpdate(), 4000); // (on its own, so nothing else at start-up can stop it)
   $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
 
@@ -952,6 +1034,6 @@
     $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
     $("pilot-name").value = P("pilotName") || "";
     $("pilot-name").onchange = () => { const v = $("pilot-name").value.trim().slice(0, 24); save({ pilotName: v }); toast(v ? "Hi, " + v + "!" : "Name cleared."); };
-    askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true); refreshDns();
+    askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true); fxInit();
   })();
 })();

@@ -1,7 +1,7 @@
 // BelleCord (new): Fluxer and Discord in one window, each the real website, each signed in as you.
 // No bot is needed to read or type: these are the sites themselves, in their own saved sign-ins.
 // Nothing here reads, types or clicks for you on either site.
-const { app, BrowserWindow, session, shell, desktopCapturer, ipcMain, screen, Menu, clipboard, Notification, Tray, nativeImage, net } = require("electron");
+const { app, BrowserWindow, session, shell, desktopCapturer, ipcMain, screen, Menu, clipboard, Notification, Tray, nativeImage, net, webContents } = require("electron");
 const zlib = require("zlib");
 const path = require("path");
 const fs = require("fs");
@@ -15,11 +15,14 @@ const CHROME_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 const FIREFOX_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0";
 const isGoogleSignIn = (u) => /^https:\/\/(accounts\.google\.com|accounts\.youtube\.com)\//i.test(u);
 // sign-in and helper windows of these sites stay inside the app (so the sign-in sticks); other links open in your browser
-const STAYS_IN = /^https:\/\/([a-z0-9-]+\.)*(fluxer\.app|fluxer\.gg|discord\.com|discord\.gg|discordapp\.com|hcaptcha\.com|accounts\.google\.com|appleid\.apple\.com)(\/|$)/i;
+// (fluxer.com too: Fluxer is moving its web app there from web.fluxer.app)
+const STAYS_IN = /^https:\/\/([a-z0-9-]+\.)*(fluxer\.app|fluxer\.com|fluxer\.gg|discord\.com|discord\.gg|discordapp\.com|hcaptcha\.com|accounts\.google\.com|appleid\.apple\.com)(\/|$)/i;
 const PARTS = ["persist:fluxer", "persist:discord", "persist:tiktok", "persist:pinterest", "persist:x", "persist:links"];
 const PANEL_PARTS = ["persist:tiktok", "persist:pinterest", "persist:x", "persist:links"]; // the side panels (any website)
 
-app.commandLine.appendSwitch("disable-features", "WebRtcAllowInputVolumeAdjustment,FedCm,FedCmButtonMode");
+// (IntensiveWakeUpThrottling and AllowAggressiveThrottlingWithWebSocket off, like Fluxer's own desktop app: a side you're
+//  not looking at was slowed down until its live connection dropped. All features go in this one switch.)
+app.commandLine.appendSwitch("disable-features", "WebRtcAllowInputVolumeAdjustment,FedCm,FedCmButtonMode,IntensiveWakeUpThrottling,AllowAggressiveThrottlingWithWebSocket");
 app.commandLine.appendSwitch("disable-blink-features", "FedCm");
 app.userAgentFallback = CHROME_UA;
 app.setAppUserModelId(NAME);
@@ -54,38 +57,37 @@ ipcMain.handle("img:set", (e, key, data) => {
 ipcMain.handle("notify", (e, { title, body }) => { try { if (Notification.isSupported()) new Notification({ title: String(title || NAME), body: String(body || ""), ...withIcon() }).show(); } catch {} });
 ipcMain.handle("open-external", (e, url) => { if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url)); });
 
-// ---- DNS: Fluxer sometimes won't load because the computer's DNS can't find web.fluxer.app (some home
-// routers, some ISPs and some ad-blocking DNS return "not found" for it, or keep a stale "not found" cached).
-// "Secure DNS" makes BelleCord look names up itself over an encrypted connection to Cloudflare, around the
-// broken one. The setting is applied once at start-up (Chromium only lets us set it once), so turning it on or
-// off restarts the app. The "Fix DNS" button also forgets any stale "not found" that's cached.
-const DOH = { cloudflare: "https://cloudflare-dns.com/dns-query", google: "https://dns.google/dns-query" };
-function dnsServer() { const k = String(readPrefs().dohProvider || "cloudflare"); return DOH[k] || DOH.cloudflare; }
-let secureDnsApplied = false;
-function applySecureDns() {
-  if (secureDnsApplied || !readPrefs().secureDns) return;
-  try { app.configureHostResolver({ secureDnsMode: "secure", secureDnsServers: [dnsServer()] }); secureDnsApplied = true; } catch (e) { try { console.error("secure DNS:", e?.message || e); } catch {} }
-}
-async function clearDnsCache() { for (const p of ["", ...PARTS]) { try { await (p ? session.fromPartition(p) : session.defaultSession).clearHostResolverCache(); } catch {} } }
-ipcMain.handle("dns:get", () => ({ secureDns: !!readPrefs().secureDns, applied: secureDnsApplied, provider: String(readPrefs().dohProvider || "cloudflare") }));
-ipcMain.handle("dns:set", async (e, changes) => {
-  const was = !!readPrefs().secureDns, wasP = String(readPrefs().dohProvider || "cloudflare");
-  const next = changes && typeof changes === "object" ? changes : {};
-  writePrefs({ ...(typeof next.secureDns === "boolean" ? { secureDns: next.secureDns } : {}), ...(next.provider && DOH[next.provider] ? { dohProvider: next.provider } : {}) });
-  const nowOn = !!readPrefs().secureDns, nowP = String(readPrefs().dohProvider || "cloudflare");
-  // turning secure DNS on/off, or changing provider while it's on, only takes effect after a restart
-  const needRestart = nowOn !== was || (nowOn && nowP !== wasP);
-  if (needRestart) { flushAll(); setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 250); }
-  return { secureDns: nowOn, provider: nowP, restarting: needRestart };
-});
-ipcMain.handle("dns:fix", async () => {
-  await clearDnsCache();
-  // if secure DNS isn't on yet, turn it on and restart with it (the reliable fix); otherwise just forget the
-  // stale "not found" and reload the two sites
-  if (!readPrefs().secureDns) { writePrefs({ secureDns: true }); flushAll(); setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 250); return { restarting: true, secureDns: true }; }
-  try { if (win && !win.isDestroyed()) win.webContents.send("notice", "dns-reload"); } catch {}
-  return { restarting: false, secureDns: true, refreshed: true };
-});
+// ---- Fix Fluxer: one button for whatever keeps Fluxer from working here (DNS, a hosts-file block, a proxy, a
+// broken saved copy of Fluxer, Fluxer's move to fluxer.com...). The work is in fluxer-fix.cjs; its settings are
+// kept in fluxer-fix.json next to your other settings. Every network change it makes is tested first and undone
+// if it doesn't help. (This replaces Update 6's "Fix DNS" button.) ----
+const fixFile = () => path.join(app.getPath("userData"), "fluxer-fix.json");
+const fixStore = {
+  get() {
+    try { return JSON.parse(fs.readFileSync(fixFile(), "utf-8")) || {}; } catch {}
+    // first time: carry over Update 6's "secure DNS" switch (it's re-checked at start, and switched off if it doesn't work)
+    return readPrefs().secureDns ? { secureDns: true } : {};
+  },
+  set(ch) {
+    try { const next = { ...fixStore.get(), ...ch }; fs.mkdirSync(path.dirname(fixFile()), { recursive: true }); fs.writeFileSync(fixFile(), JSON.stringify(next, null, 1)); } catch {}
+    if ("secureDns" in readPrefs() || "dohProvider" in readPrefs()) writePrefs({ secureDns: null, dohProvider: null }); // (the old switch now lives here)
+  },
+};
+// (safety net: if the Fix Fluxer part ever fails to load, BelleCord still opens normally, just without the button's fixes)
+let fluxerFix = null, fluxerFixError = "";
+try {
+  fluxerFix = require("./fluxer-fix.cjs")({ app, session, webContents, BrowserWindow, shell, store: fixStore, log: (m) => { try { console.log("[Fix Fluxer] " + m); } catch {} } });
+  fluxerFix.beforeReady(); // (the hosts-file workaround has to be in place before anything connects)
+} catch (e) { fluxerFix = null; fluxerFixError = String((e && e.message) || e); try { console.error("[Fix Fluxer] couldn't start: " + fluxerFixError); } catch {} }
+const fixMissing = () => ({ ok: false, restartNeeded: false, home: "https://web.fluxer.app", page: null, youDo: [], steps: [{ id: "app", label: "Fix Fluxer couldn't start in BelleCord", status: "fail", detail: fluxerFixError }], tech: "Fix Fluxer didn't load: " + fluxerFixError });
+ipcMain.handle("fluxer:fix", (e) => (fluxerFix ? fluxerFix.fix((step) => { try { if (!e.sender.isDestroyed()) e.sender.send("fluxer-progress", step); } catch {} }) : fixMissing()));
+ipcMain.handle("fluxer:diagnose", () => (fluxerFix ? fluxerFix.diagnose() : { error: fluxerFixError }));
+ipcMain.handle("fluxer:reset", () => (fluxerFix ? fluxerFix.reset() : { ok: false }));
+ipcMain.handle("fluxer:clean", () => (fluxerFix ? fluxerFix.openClean() : { ok: false }));
+ipcMain.handle("fluxer:help", (e, what) => { if (fluxerFix) fluxerFix.openHelp(String(what || "")); return true; });
+ipcMain.handle("fluxer:home", () => (fluxerFix ? fluxerFix.home() : "https://web.fluxer.app"));
+ipcMain.handle("fluxer:last", () => { try { return fixStore.get().lastFix || null; } catch { return null; } });
+ipcMain.handle("app:restart", () => { flushAll(); setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 300); return true; });
 // ---- game badges: everyone's badges live on the badge hub (its address is in hub.json next to this file) ----
 function hubAddress() {
   try { const a = String(JSON.parse(fs.readFileSync(path.join(__dirname, "hub.json"), "utf-8")).address || "").trim().replace(/\/+$/, ""); if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(a) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(a)) return a; } catch {}
@@ -259,7 +261,8 @@ function open() {
     prefs2.contextIsolation = true;
     prefs2.sandbox = true;
     const src = params.src || "", part = params.partition;
-    const ok = PANEL_PARTS.includes(part) ? /^https:\/\//i.test(src) : (part === "persist:fluxer" && /^https:\/\/([a-z0-9-]+\.)*fluxer\.app\//i.test(src)) || (part === "persist:discord" && /^https:\/\/([a-z0-9-]+\.)*discord\.com\//i.test(src));
+    const ok = PANEL_PARTS.includes(part) ? /^https:\/\//i.test(src) : (part === "persist:fluxer" && /^https:\/\/([a-z0-9-]+\.)*fluxer\.(app|com)\//i.test(src)) || (part === "persist:discord" && /^https:\/\/([a-z0-9-]+\.)*discord\.com\//i.test(src));
+    if (part === "persist:fluxer" || part === "persist:discord") prefs2.backgroundThrottling = false; // (each side stays connected while it's out of sight)
     if (!ok) e.preventDefault();
   });
   win.webContents.on("will-navigate", (e) => e.preventDefault()); // the app's own page never turns into a website
@@ -269,10 +272,11 @@ function open() {
   win.loadFile(SHELL);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Mac: the menu bar (copy, paste, undo and quitting need it there)
   if (MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]));
-  applySecureDns(); // (if you turned it on: look names up over Cloudflare, around a broken local DNS)
+  // Fix Fluxer's saved settings (and a quick check that secure DNS, if it's on, still works on this network)
+  if (fluxerFix) { try { await Promise.race([fluxerFix.afterReady().catch(() => {}), new Promise((r) => setTimeout(r, 4000))]); } catch {} }
   setUp(session.defaultSession);
   for (const p of PARTS) setUp(session.fromPartition(p));
   makeTray();
