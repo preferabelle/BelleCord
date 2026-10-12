@@ -118,7 +118,7 @@
       const dns = /NAME_NOT_RESOLVED/i.test(e.errorDescription); // the computer's DNS can't find the address
       const offline = /INTERNET|NETWORK/i.test(e.errorDescription);
       const canFix = !!(fxfix && host.fixFluxer);
-      fail.querySelector(".why").textContent = offline ? "Your internet looks off. When it's back, try again." : (dns ? sideName(name) + "'s address couldn't be found from this computer." : sideName(name) + " didn't answer (" + e.errorDescription + ").") + (canFix ? " “Fix Fluxer” finds out why, and fixes what it can." : dns ? " This is usually your computer's DNS." : " It may be having trouble; try again in a bit.");
+      fail.querySelector(".why").textContent = offline ? "Your internet looks off. When it's back, try again." : (dns ? sideName(name) + "'s address couldn't be found from this computer." : sideName(name) + " didn't answer (" + e.errorDescription + ").") + (canFix ? " \"Fix Fluxer\" finds out why, and fixes what it can." : dns ? " This is usually your computer's DNS." : " It may be having trouble; try again in a bit.");
       if (fxfix) fxfix.hidden = !canFix;
       fail.hidden = false; net.className = "net down"; net.title = dns ? sideName(name) + "'s address can't be found" : offline ? "Your internet is off" : sideName(name) + " isn't answering";
     });
@@ -481,7 +481,7 @@
     const all = [...mine, ...T.TEMPLATES];
     const q = (themeQuery || "").trim().toLowerCase();
     const shown = q ? all.map((tp, i) => ({ tp, i })).filter(({ tp }) => (tp.name + " " + (tp.blurb || "")).toLowerCase().includes(q)) : all.map((tp, i) => ({ tp, i }));
-    setHtml($("templates"), shown.length ? shown.map(({ tp, i }) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join("") : '<p class="empty">No themes match “' + esc(q) + '”.</p>');
+    setHtml($("templates"), shown.length ? shown.map(({ tp, i }) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join("") : '<p class="empty">No themes match "' + esc(q) + '".</p>');
     const asPicked = (tp) => { const p = { ...tp.pieces, effects: [...(tp.pieces.effects || [])] }; if (P("keepColors") && !tp.mine) p.palette = P("theme").palette; return { ...P("theme"), ...p }; };
     $("templates").querySelectorAll(".tpl").forEach((b) => { b.onmouseenter = () => showMini(asPicked(all[Number(b.dataset.i)])); b.onmouseleave = () => showMini(); });
     $("templates").querySelectorAll(".tpl").forEach((b) => (b.onclick = async (e) => {
@@ -517,7 +517,7 @@
   $("tpl-search").oninput = (e) => { themeQuery = e.target.value; paintStudio(); };
   $("theme-surprise").onclick = () => {
     const pick = (obj, excl) => { const ks = Object.keys(obj).filter((k) => !(excl || []).includes(k)); return ks[Math.floor(Math.random() * ks.length)]; };
-    const pool = Object.keys(T.EFFECTS), chosen = [], n = Math.floor(Math.random() * 3); // 0–2 effects
+    const pool = Object.keys(T.EFFECTS), chosen = [], n = Math.floor(Math.random() * 3); // 0-2 effects
     for (let i = 0; i < n && pool.length; i++) chosen.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     setTheme({ palette: pick(T.PALETTES, ["fluxer"]), background: pick(T.BACKGROUNDS, ["wallpaper"]), corners: pick(T.CORNERS), font: pick(T.FONTS), size: pick(T.SIZES), spacing: pick(T.SPACING), effects: chosen });
     toast("Surprise! Tweak it below, or hit Start over.");
@@ -588,7 +588,7 @@
     });
   }
 
-  // ---------------- the intro (Belle's, with your name) ----------------
+  // ---------------- the intro (mine, with your name) ----------------
   function intro() {
     const sp = $("bcsplash");
     if (!sp || sessionStorage.getItem("bcIntro")) return;
@@ -698,7 +698,7 @@
     return 1;
   }.toString() + ")";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(BADGE_PAGE + "(" + JSON.stringify(s2) + ")").catch(() => {}); });
-  // Belle's bridged bots on Fluxer (the mirrors that speak for her Discord friends) don't wear a BOT tag: they're people
+  // my bridged bots on Fluxer (the mirrors that speak for my Discord friends) don't wear a BOT tag: they're people
   const NOBOT_PAGE = "(" + function (ids) {
     window.__bcBridged = new Set(ids);
     if (window.__bcNoBot) return 1;
@@ -792,7 +792,7 @@
       (g.showRank !== false && ranks.length ? '<div class="ggrid">' + ranks.map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
       (g.showStats !== false && Object.keys(stats).length ? '<div class="ggrid">' + Object.entries(stats).map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
       (L.endorsement ? '<div class="gmuted">Endorsement level ' + cardEsc(L.endorsement) + "</div>" : "") +
-      (loading ? '<div class="gmuted">Loading stats…</div>' : "") + (liveErr ? '<div class="gwarn">' + cardEsc(liveErr) + "</div>" : "") +
+      (loading ? '<div class="gmuted">Loading stats...</div>' : "") + (liveErr ? '<div class="gwarn">' + cardEsc(liveErr) + "</div>" : "") +
       '<div class="gacts"><button id="gc-x">Close</button>' + (game.live && g.handle && g.tracking !== false ? '<button id="gc-r">Refresh</button>' : "") + (key === "me" || isMine(key) ? '<button class="primary" id="gc-e">Customize</button>' : "") + "</div></div>";
     $("gcard").hidden = false;
     box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
@@ -823,13 +823,13 @@
     const box = $("gb-edit");
     box.innerHTML = '<h3><span class="gb" style="background:' + game.color + '">' + (G.icon(game.key) || esc(game.glyph)) + "</span>" + esc(game.name) + "</h3>" +
       '<label>' + esc(game.handle) + '<input type="text" id="ge-handle" maxlength="40" placeholder="' + esc(game.hint) + '" value="' + esc(d.handle || "") + '"></label>' +
-      (game.ranks.length && !isOW ? '<label>' + esc(game.rankLabel || "Rank") + '<select id="ge-rank">' + opt(game.ranks, d.rank, "—") + "</select></label>" + (game.rankLabel ? "" : '<label>Division / number<input type="text" id="ge-rankd" maxlength="30" placeholder="2, 1534 LP…" value="' + esc(d.rankDetail || "") + '"></label>') : "") +
-      (isOW ? '<div style="grid-column:1/-1;font-size:12px;opacity:.75">Your ranks and stats come from your real Overwatch profile, so they can\'t be typed in.</div>' : game.roles ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "—") + "</select></label>" : "") +
-      '<label>' + esc(game.mainLabel) + (game.mains ? '<select id="ge-main">' + opt(game.mains, d.main, "—") + "</select>" : '<input type="text" id="ge-main" maxlength="40" value="' + esc(d.main || "") + '">') + "</label>" +
+      (game.ranks.length && !isOW ? '<label>' + esc(game.rankLabel || "Rank") + '<select id="ge-rank">' + opt(game.ranks, d.rank, "-") + "</select></label>" + (game.rankLabel ? "" : '<label>Division / number<input type="text" id="ge-rankd" maxlength="30" placeholder="2, 1534 LP..." value="' + esc(d.rankDetail || "") + '"></label>') : "") +
+      (isOW ? '<div style="grid-column:1/-1;font-size:12px;opacity:.75">Your ranks and stats come from your real Overwatch profile, so they can\'t be typed in.</div>' : game.roles ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "-") + "</select></label>" : "") +
+      '<label>' + esc(game.mainLabel) + (game.mains ? '<select id="ge-main">' + opt(game.mains, d.main, "-") + "</select>" : '<input type="text" id="ge-main" maxlength="40" value="' + esc(d.main || "") + '">') + "</label>" +
       '<label>Color<input type="color" id="ge-accent" value="' + esc(/^#[0-9a-f]{6}$/i.test(d.accent || "") ? d.accent : game.color) + '"></label>' +
       '<label class="wide">A line under the name<textarea id="ge-tag" maxlength="140">' + esc(d.tagline || "") + "</textarea></label>" +
       '<div class="statrow">' + game.stats.map((st) => '<label>' + esc(st) + '<input type="text" data-st="' + esc(st) + '" maxlength="24" value="' + esc((d.stats || {})[st] || "") + '"></label>').join("") + "</div>" +
-      '<div class="acts"><button id="ge-st">' + (d.sticker ? "Change sticker" : "Sticker…") + "</button>" + (d.sticker ? '<button id="ge-stx">Remove sticker</button>' : "") + "</div>" +
+      '<div class="acts"><button id="ge-st">' + (d.sticker ? "Change sticker" : "Sticker...") + "</button>" + (d.sticker ? '<button id="ge-stx">Remove sticker</button>' : "") + "</div>" +
       '<div class="checks"><label><input type="checkbox" id="ge-on"' + (d.enabled !== false ? " checked" : "") + "> Show the badge</label>" + (game.live ? '<label><input type="checkbox" id="ge-live"' + (d.tracking !== false ? " checked" : "") + "> Live stats</label>" : "") + '<label><input type="checkbox" id="ge-sr"' + (d.showRank !== false ? " checked" : "") + '> Rank</label><label><input type="checkbox" id="ge-ss"' + (d.showStats !== false ? " checked" : "") + '> Stats</label><label><input type="checkbox" id="ge-sk"' + (d.showSticker !== false ? " checked" : "") + "> Sticker</label></div>" +
       '<div class="acts"><button class="primary" id="ge-save">Save</button><button id="ge-view">Preview</button>' + (myPerson().games[key] ? '<button id="ge-del">Remove</button>' : "") + '<button id="ge-close">Close</button><span class="msg" id="ge-msg"></span></div><div class="acts" id="ge-code" hidden></div>';
     box.hidden = false;
@@ -848,7 +848,7 @@
       const g = collect();
       if (key === "overwatch" && g.handle && !/^[^#\s]{2,32}#\d{3,8}$/.test(g.handle)) { q("#ge-msg").className = "msg bad"; q("#ge-msg").textContent = "A BattleTag looks like Name#1234"; return; }
       await save({ myBadges: { games: { ...myPerson().games, [key]: g } }, badgesDirty: true });
-      q("#ge-msg").className = "msg"; q("#ge-msg").textContent = "Saving…";
+      q("#ge-msg").className = "msg"; q("#ge-msg").textContent = "Saving...";
       showSave(await sendBadges());
     };
     const showSave = (r) => {
@@ -865,7 +865,7 @@
       box2.innerHTML = need.map((s2) => '<label>' + sideName(s2) + ' code<input type="text" inputmode="numeric" maxlength="6" data-code="' + s2 + '" placeholder="123456"></label>').join("") + '<button class="primary" id="gc-ok">Confirm</button><button id="gc-new">Send a new code</button><span class="msg" id="gc-msg"></span>';
       const say = (t, badT) => { box2.querySelector("#gc-msg").className = "msg" + (badT ? " bad" : ""); box2.querySelector("#gc-msg").textContent = t; };
       const sendNew = async () => {
-        say("Asking Asuka…");
+        say("Asking Asuka...");
         const me = P("me"), ids = {}; for (const s2 of need) if (me[s2]) ids[s2] = me[s2].id;
         const r = await hub("POST", "/v1/code", { ids });
         if (!r.ok) return say(r.error === "offline" ? "The badge hub is off" : r.error, true);
@@ -875,7 +875,7 @@
       box2.querySelector("#gc-new").onclick = sendNew;
       box2.querySelector("#gc-ok").onclick = async () => {
         const codes = {}; box2.querySelectorAll("[data-code]").forEach((i) => { if (i.value.trim()) codes[i.dataset.code] = i.value.trim(); });
-        say("Checking…");
+        say("Checking...");
         const r = await sendBadges(false, codes);
         if (r.status === 401 && r.data && r.data.error === "code") {
           const b2 = r.data.bad || {}, why = Object.entries(b2).map(([s2, w]) => sideName(s2) + ": " + (w === "wrong" ? "that code isn't right" : w === "expired" ? "that code expired, send a new one" : "send a code first")).join(". ");
@@ -910,14 +910,14 @@
   $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
   async function checkUpdate(loud) {
     if (!host.checkUpdate) return;
-    if (loud) $("upd-msg").textContent = "Checking…";
+    if (loud) $("upd-msg").textContent = "Checking...";
     const r = await host.checkUpdate().catch(() => null);
     if (!r || (r.error && !loud)) { if ((checkUpdate.tries = (checkUpdate.tries || 0) + 1) <= 5) setTimeout(checkUpdate, 60000); if (!r) return; } else checkUpdate.tries = 0; // (no internet yet when the app opened: try again in a minute)
-    $("app-ver").textContent = "Version " + r.version;
+    $("app-ver").textContent = (r.version ? "BelleCord Update " + r.version + " · " : "BelleCord · ") + "made by Belle";
     $("updbtn").hidden = !r.available;
-    if (loud) $("upd-msg").textContent = r.available ? "Version " + r.latest + " is ready" : r.error ? "Couldn't check" : "Up to date";
+    if (loud) $("upd-msg").textContent = r.available ? "Update " + r.latest + " is ready" : r.error ? "Couldn't check" : "Up to date";
   }
-  const doUpdate = async () => { $("updbtn").textContent = "Updating…"; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
+  const doUpdate = async () => { $("updbtn").textContent = "Updating..."; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
 
   // ---------------- Fix Fluxer: one button for whatever keeps Fluxer from working ----------------
@@ -925,7 +925,7 @@
   // (old lookups and stuck connections, a broken saved copy of Fluxer, DNS that can't find Fluxer, a hosts-file line
   // that blocks it, a proxy, Fluxer's move to fluxer.com), reloads Fluxer, checks the page really came up, and says
   // plainly what's left for you (a VPN like Cloudflare WARP, a wrong clock, Fluxer itself being down).
-  const FX_ICON = { run: "", ok: "✓", fixed: "✓", warn: "!", fail: "✕", skip: "–" };
+  const FX_ICON = { run: "", ok: "✓", fixed: "✓", warn: "!", fail: "✕", skip: "-" };
   let fxRunning = false;
   function fxModal() {
     let m = $("fxmodal");
@@ -962,9 +962,9 @@
     fxRunning = false;
     if (report) for (const st of report.steps || []) fxStep(m, st);
     const fixedSomething = !!report && (report.steps || []).some((x) => x.status === "fixed");
-    if (report && report.restartNeeded) { head.className = "fxhead bad"; head.textContent = "Almost there — restart BelleCord to finish."; }
-    else if (report && report.ok) { head.className = "fxhead good"; head.textContent = fixedSomething ? "Fluxer should be working now. ✓" : "Everything checks out — Fluxer is working. ✓"; }
-    else { head.className = "fxhead bad"; head.textContent = report ? "Fluxer still isn't working from this computer — here's what's left:" : "Close BelleCord completely, open it again, then press Fix Fluxer again."; }
+    if (report && report.restartNeeded) { head.className = "fxhead bad"; head.textContent = "Almost there - restart BelleCord to finish."; }
+    else if (report && report.ok) { head.className = "fxhead good"; head.textContent = fixedSomething ? "Fluxer should be working now. ✓" : "Everything checks out - Fluxer is working. ✓"; }
+    else { head.className = "fxhead bad"; head.textContent = report ? "Fluxer still isn't working from this computer - here's what's left:" : "Close BelleCord completely, open it again, then press Fix Fluxer again."; }
     // the cause, in one line (fixed, or what's still in the way)
     if (report && report.finding) { found.hidden = false; found.className = "fxfound" + (report.ok ? " fixed" : ""); found.innerHTML = "<b>" + (report.ok ? "What was wrong" : "What's wrong") + "</b>" + esc(report.finding); }
     // what's left for you
@@ -982,10 +982,10 @@
     if (report && !report.ok && host.fluxerHelp && !todos.some((t) => t.action === "browser")) btn("Open Fluxer in my browser", "", () => host.fluxerHelp("browser"));
     if (host.fluxerReset) {
       const r = btn("Sign out & start fresh", "", async () => {
-        if (!r.dataset.sure) { r.dataset.sure = "1"; r.textContent = "Really? This signs you out of Fluxer here — click again"; r.classList.add("danger"); setTimeout(() => { if (r.isConnected) { delete r.dataset.sure; r.textContent = "Sign out & start fresh"; r.classList.remove("danger"); } }, 5000); return; }
-        r.disabled = true; r.textContent = "Starting fresh…";
+        if (!r.dataset.sure) { r.dataset.sure = "1"; r.textContent = "Really? This signs you out of Fluxer here - click again"; r.classList.add("danger"); setTimeout(() => { if (r.isConnected) { delete r.dataset.sure; r.textContent = "Sign out & start fresh"; r.classList.remove("danger"); } }, 5000); return; }
+        r.disabled = true; r.textContent = "Starting fresh...";
         await host.fluxerReset().catch(() => {});
-        r.textContent = "Done — sign in to Fluxer again";
+        r.textContent = "Done - sign in to Fluxer again";
       });
     }
     if (report && report.restartNeeded && host.restartApp) btn("Restart BelleCord", "primary", () => host.restartApp());

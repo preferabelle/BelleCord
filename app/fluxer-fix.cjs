@@ -1,5 +1,5 @@
 // Fix Fluxer: one button that finds out why Fluxer won't work in BelleCord, and fixes everything an app can fix.
-// Shared by both BelleCords (Belle's own and the everyone app). Runs in the app's main process (Electron).
+// Shared by both BelleCords (mine and the everyone app). Runs in the app's main process (Electron).
 //
 // What it checks, and what it does about each:
 //   * old lookups and stuck connections ............. forgets them
@@ -63,7 +63,7 @@ function kindOf(code) {
 const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error((label || "timeout") + " (timeout)")), ms))]);
 const hostOf = (u) => { try { return new URL(String(u).replace(/^wss?:/i, "https:")).hostname.toLowerCase(); } catch { return ""; } };
 const isHome = (u) => HOMES.includes(String(u || "").replace(/\/+$/, ""));
-const short = (u) => { try { const x = new URL(u); return x.hostname + (x.pathname.length > 32 ? x.pathname.slice(0, 14) + "…" + x.pathname.slice(-16) : x.pathname); } catch { return String(u || "").slice(0, 60); } };
+const short = (u) => { try { const x = new URL(u); return x.hostname + (x.pathname.length > 32 ? x.pathname.slice(0, 14) + "..." + x.pathname.slice(-16) : x.pathname); } catch { return String(u || "").slice(0, 60); } };
 const mb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 
 // runs inside Fluxer's page: did Fluxer really come up, and are you signed in?
@@ -82,11 +82,11 @@ const PAGE_PROBE = "(" + function () {
 
 /**
  * @param {object} o
- *   app, session, webContents, BrowserWindow, shell — Electron's own modules
- *   store: { get(): object, set(changes): void } — where this BelleCord keeps the Fix Fluxer settings
- *   helpLine — who helps this BelleCord's user, said in the app's own voice (or null for none)
- *   partition — Fluxer's saved sign-in (default persist:fluxer); log — optional
- *   https — Node's https module (tests pass a stand-in)
+ *   app, session, webContents, BrowserWindow, shell - Electron's own modules
+ *   store: { get(): object, set(changes): void } - where this BelleCord keeps the Fix Fluxer settings
+ *   helpLine - who helps this BelleCord's user, said in the app's own voice (or null for none)
+ *   partition - Fluxer's saved sign-in (default persist:fluxer); log - optional
+ *   https - Node's https module (tests pass a stand-in)
  */
 module.exports = function createFluxerFix(o) {
   const { app, session, webContents, BrowserWindow, shell, store } = o;
@@ -347,8 +347,8 @@ module.exports = function createFluxerFix(o) {
         // answer before) at least one of those answers now
         const wasDown = dnsBad.map((h, i) => (H[h].http.ok ? -1 : i)).filter((i) => i >= 0);
         const helped = look.every((r) => r.ips.length && !r.blocked) && dnsBad.every((h, i) => !H[h].http.ok || again[i].ok) && (!wasDown.length || wasDown.some((i) => again[i].ok));
-        if (helped) { s.secureDns = true; step("dns", "Your DNS gave wrong or out-of-date answers for Fluxer — now using secure DNS instead", "fixed", "Fixed for: " + names + ". Lookups for Fluxer now go to Cloudflare / Google over an encrypted connection, around your router's or provider's DNS. (Fluxer's status page has a notice about out-of-date DNS answers since it moved its servers.)"); finding = finding || "Your DNS was giving out wrong or out-of-date addresses for " + names + "."; }
-        else { applyResolver(false); s.secureDns = false; step("dns", "Your DNS has trouble with Fluxer, and secure DNS doesn't get through here either", "fail", names); youDo.push({ text: "Something on this computer or network blocks Fluxer's addresses (antivirus “web protection”, a parental/ad filter, or your router). Allow fluxer.app, fluxer.com, fluxerstatic.com and fluxerusercontent.com in it, or try another network to confirm." }); }
+        if (helped) { s.secureDns = true; step("dns", "Your DNS gave wrong or out-of-date answers for Fluxer - now using secure DNS instead", "fixed", "Fixed for: " + names + ". Lookups for Fluxer now go to Cloudflare / Google over an encrypted connection, around your router's or provider's DNS. (Fluxer's status page has a notice about out-of-date DNS answers since it moved its servers.)"); finding = finding || "Your DNS was giving out wrong or out-of-date addresses for " + names + "."; }
+        else { applyResolver(false); s.secureDns = false; step("dns", "Your DNS has trouble with Fluxer, and secure DNS doesn't get through here either", "fail", names); youDo.push({ text: "Something on this computer or network blocks Fluxer's addresses (antivirus \"web protection\", a parental/ad filter, or your router). Allow fluxer.app, fluxer.com, fluxerstatic.com and fluxerusercontent.com in it, or try another network to confirm." }); }
       } else if (s.secureDns) {
         applyResolver(true);
         const still = await resolve(ses, "web.fluxer.app", true);
@@ -358,19 +358,19 @@ module.exports = function createFluxerFix(o) {
 
       // the hosts file (DNS can't go around this one, so BelleCord maps those names itself)
       if (before.hostsFile.hosts.length) {
-        step("hosts", "Your computer's hosts file blocks Fluxer — going around it", "run");
+        step("hosts", "Your computer's hosts file blocks Fluxer - going around it", "run");
         const pins = {};
         for (const h of before.hostsFile.hosts) { const ips = await dohA(h); if (ips.length) pins[h] = ips.slice(0, 4); }
         const lines = before.hostsFile.lines.map((l) => "line " + l.n + ": " + l.text).join("\n");
         if (Object.keys(pins).length) {
           for (const [h, ips] of Object.entries(pins)) { s.pins[h] = ips; s.pinWhy[h] = "hosts"; }
-          step("hosts", "Your computer's hosts file blocks Fluxer — BelleCord now goes around it", "fixed", "To fix your browser too, delete these lines from " + before.hostsFile.file + ":\n" + lines);
+          step("hosts", "Your computer's hosts file blocks Fluxer - BelleCord now goes around it", "fixed", "To fix your browser too, delete these lines from " + before.hostsFile.file + ":\n" + lines);
         } else step("hosts", "Your computer's hosts file blocks Fluxer", "fail", "Delete these lines from " + before.hostsFile.file + ":\n" + lines);
-        youDo.push({ text: "Your hosts file (" + before.hostsFile.file + ") has " + before.hostsFile.lines.length + " line(s) blocking Fluxer — an ad-blocker or “privacy” tool probably added them. Delete them (Notepad, run as administrator) so Fluxer works in your browser too.", action: "hosts" });
+        youDo.push({ text: "Your hosts file (" + before.hostsFile.file + ") has " + before.hostsFile.lines.length + " line(s) blocking Fluxer - an ad-blocker or \"privacy\" tool probably added them. Delete them (Notepad, run as administrator) so Fluxer works in your browser too.", action: "hosts" });
         finding = finding || "Your computer's hosts file blocks Fluxer.";
       } else {
         const old = Object.keys(s.pins).filter((h) => (s.pinWhy[h] || "hosts") === "hosts");
-        if (old.length) { for (const h of old) { delete s.pins[h]; delete s.pinWhy[h]; } step("hosts", "Your hosts file doesn't block Fluxer anymore — workaround removed", "fixed"); }
+        if (old.length) { for (const h of old) { delete s.pins[h]; delete s.pinWhy[h]; } step("hosts", "Your hosts file doesn't block Fluxer anymore - workaround removed", "fixed"); }
       }
 
       // a proxy Fluxer can't get through
@@ -382,7 +382,7 @@ module.exports = function createFluxerFix(o) {
         else if (!s.direct) {
           try { await ses.setProxy({ mode: "direct" }); } catch {}
           const direct = await reach(ses, home() + "/", 9000);
-          if (direct.ok) { s.direct = true; step("proxy", "Fluxer couldn't get through your computer's proxy — now connecting directly", "fixed", before.proxy); finding = finding || "Fluxer couldn't get through your computer's proxy."; }
+          if (direct.ok) { s.direct = true; step("proxy", "Fluxer couldn't get through your computer's proxy - now connecting directly", "fixed", before.proxy); finding = finding || "Fluxer couldn't get through your computer's proxy."; }
           else { try { await ses.setProxy({ mode: "system" }); } catch {} step("proxy", "Fluxer can't get through your computer's proxy, and a direct connection doesn't work either", "fail", before.proxy); youDo.push({ text: "Your computer sends web traffic through a proxy (" + before.proxy + ") that Fluxer can't get through. Turn it off in Windows Settings › Network › Proxy, or ask whoever set it up." }); }
         } else { try { await ses.setProxy({ mode: "system" }); } catch {} s.direct = false; step("proxy", "Going back to your computer's normal connection settings", "fixed"); }
       }
@@ -390,7 +390,7 @@ module.exports = function createFluxerFix(o) {
       // clock (secure sites refuse to connect when it's far off)
       if (before.clockMin != null && Math.abs(before.clockMin) >= 5) {
         step("clock", "Your computer's clock is " + Math.abs(before.clockMin) + " minutes " + (before.clockMin > 0 ? "ahead" : "behind"), "fail", "Secure sites like Fluxer refuse to connect when the clock is wrong.");
-        youDo.push({ text: "Your computer's clock is off by " + Math.abs(before.clockMin) + " minutes. Open Windows Settings › Time & language › Date & time and press “Sync now”.", action: "time" });
+        youDo.push({ text: "Your computer's clock is off by " + Math.abs(before.clockMin) + " minutes. Open Windows Settings › Time & language › Date & time and press \"Sync now\".", action: "time" });
         finding = finding || "Your computer's clock is wrong, so secure sites refuse to connect.";
       }
 
@@ -409,11 +409,11 @@ module.exports = function createFluxerFix(o) {
       else if (oldA.ok || newA.ok) step("where", moved ? "web.fluxer.app isn't answering, so BelleCord now uses fluxer.com" : "Fluxer answers at " + where.replace(/^https:\/\//, ""), moved ? "fixed" : "ok", moved ? "You may need to sign in to Fluxer once there." : "");
       else {
         const why = oldA.kind === "dns" ? "its address can't be found" : oldA.kind === "tls" ? "the secure connection fails (often a wrong clock, or antivirus checking secure sites)" : oldA.kind === "timeout" ? "it doesn't answer in time" : oldA.kind === "offline" ? "your internet is off" : "the connection fails (" + (oldA.code || "no answer") + ")";
-        step("where", "Neither of Fluxer's addresses answers from this computer — " + why, "fail");
-        finding = finding || "Neither of Fluxer's addresses answers from this computer — " + why + ".";
+        step("where", "Neither of Fluxer's addresses answers from this computer - " + why, "fail");
+        finding = finding || "Neither of Fluxer's addresses answers from this computer - " + why + ".";
         const vpn = before.vpn;
-        if (vpn.length) youDo.push({ text: "A VPN is on (" + vpn.join(", ") + "). Fluxer is known not to work through some of them — Cloudflare WARP especially. Turn it off and press Fix Fluxer again." });
-        if (oldA.kind === "tls") youDo.push({ text: "If you use antivirus with “HTTPS scanning” / “web shield”, let it skip fluxer.app, fluxer.com and fluxerstatic.com (or turn that part off), then try again." });
+        if (vpn.length) youDo.push({ text: "A VPN is on (" + vpn.join(", ") + "). Fluxer is known not to work through some of them - Cloudflare WARP especially. Turn it off and press Fix Fluxer again." });
+        if (oldA.kind === "tls") youDo.push({ text: "If you use antivirus with \"HTTPS scanning\" / \"web shield\", let it skip fluxer.app, fluxer.com and fluxerstatic.com (or turn that part off), then try again." });
         if (before.internet.ok && !vpn.length && oldA.kind !== "tls") youDo.push({ text: "Your internet works but Fluxer doesn't answer at all. If it works on your phone on the same Wi-Fi, something on this computer is blocking it (antivirus or firewall); if not, Fluxer may be down for a bit." });
       }
 
@@ -429,7 +429,7 @@ module.exports = function createFluxerFix(o) {
         if (!bad.length) step("files", "Fluxer's app files download fine (" + mb(bytes) + " in " + (slowest / 1000).toFixed(1) + "s)", "ok");
         else {
           const first = bad[0], fh = hostOf(first.url);
-          step("files", "Fluxer's app files don't download from " + fh + " — finding out why", "run", short(first.url) + ": " + (first.code || "HTTP " + first.status));
+          step("files", "Fluxer's app files don't download from " + fh + " - finding out why", "run", short(first.url) + ": " + (first.code || "HTTP " + first.status));
           // ask the same file through each address, over a plain connection
           const sys = await resolve(ses, fh, false), doh = await dohA(fh);
           const v6 = sys.ips.filter((ip) => !isV4(ip) && !blockedIp(ip)).slice(0, 1), v4 = sys.ips.filter((ip) => isV4(ip) && !blockedIp(ip)).slice(0, 1);
@@ -447,27 +447,27 @@ module.exports = function createFluxerFix(o) {
               if (ips.length && !s.pins[h]) { s.pins[h] = ips.slice(0, 4); s.pinWhy[h] = "ipv4"; did = true; }
             }
             if (did) {
-              step("files", "Fluxer's newer IPv6 connection doesn't get through on your network — BelleCord now uses IPv4 for Fluxer", "fixed", "Your phone or iPad can have the same trouble on this Wi-Fi (videos and big files are hit first).");
+              step("files", "Fluxer's newer IPv6 connection doesn't get through on your network - BelleCord now uses IPv4 for Fluxer", "fixed", "Your phone or iPad can have the same trouble on this Wi-Fi (videos and big files are hit first).");
               finding = finding || "Your network's IPv6 connection to Fluxer drops big files, like Fluxer's app files and videos.";
             }
           }
           if (!did && sysV4ok && !quic0) {
             // a plain connection to the very same address works, so Chromium's fast "QUIC" connection is what fails here
             s.noQuic = true; did = true;
-            step("files", "Your network breaks the fast connection type (QUIC) Fluxer's files come over — BelleCord now uses the regular one", "fixed", "Some routers and antivirus programs drop QUIC partway through.");
-            finding = finding || "Your network breaks the fast “QUIC” connection that Fluxer's files come over.";
+            step("files", "Your network breaks the fast connection type (QUIC) Fluxer's files come over - BelleCord now uses the regular one", "fixed", "Some routers and antivirus programs drop QUIC partway through.");
+            finding = finding || "Your network breaks the fast \"QUIC\" connection that Fluxer's files come over.";
           }
           if (!did && !sysV4ok && d4.length && by(d4[0]) && by(d4[0]).ok && (s.pinWhy[fh] !== "dns" || (s.pins[fh] || [])[0] !== d4[0])) {
             s.pins[fh] = [d4[0], ...doh.filter((ip) => ip !== d4[0])].slice(0, 4); s.pinWhy[fh] = "dns"; did = true;
-            step("files", "Your DNS gives an out-of-date address for " + fh + " — BelleCord now uses the right one", "fixed");
+            step("files", "Your DNS gives an out-of-date address for " + fh + " - BelleCord now uses the right one", "fixed");
             finding = finding || "Your DNS gives an out-of-date address for " + fh + ", where Fluxer's app files come from.";
           }
           if (!did) {
             const t = tests.find((x) => !x.ok) || {};
             step("files", "This computer can't download Fluxer's app files from " + fh, "fail", short(first.url) + ": " + (first.code || "HTTP " + first.status) + (t.code || t.status ? " · plain connection: " + (t.code || "HTTP " + t.status) : ""));
             finding = finding || "This computer can't download Fluxer's app files from " + fh + " (" + (first.code || "HTTP " + first.status) + "), so Fluxer's page stays empty.";
-            if (tests.some((x) => /CERT|SELF_SIGNED|ISSUER/.test(x.code || ""))) youDo.push({ text: "Something on this computer checks secure connections in the middle (antivirus “HTTPS scanning” / “web shield”). Let it skip fluxer.app, fluxer.com and fluxerstatic.com, or turn that part off, then press Fix Fluxer again." });
-            youDo.push({ text: "Something between this computer and " + fh + " stops Fluxer's app files: antivirus “web protection”, a firewall, a VPN, or your internet provider. Check whether Fluxer opens in your normal browser. If it doesn't open there either, try your phone's hotspot: if it works there, your Wi-Fi or provider is the problem.", action: "browser" });
+            if (tests.some((x) => /CERT|SELF_SIGNED|ISSUER/.test(x.code || ""))) youDo.push({ text: "Something on this computer checks secure connections in the middle (antivirus \"HTTPS scanning\" / \"web shield\"). Let it skip fluxer.app, fluxer.com and fluxerstatic.com, or turn that part off, then press Fix Fluxer again." });
+            youDo.push({ text: "Something between this computer and " + fh + " stops Fluxer's app files: antivirus \"web protection\", a firewall, a VPN, or your internet provider. Check whether Fluxer opens in your normal browser. If it doesn't open there either, try your phone's hotspot: if it works there, your Wi-Fi or provider is the problem.", action: "browser" });
           }
         }
       }
@@ -477,7 +477,7 @@ module.exports = function createFluxerFix(o) {
       // reload Fluxer, wait for it to start, and look at what really came up
       let page = null, watched = null;
       const views = fluxerViews();
-      if (restartNeeded) step("reload", "Restart BelleCord to finish — Fluxer opens with the fix", "warn");
+      if (restartNeeded) step("reload", "Restart BelleCord to finish - Fluxer opens with the fix", "warn");
       else if (views.length) {
         step("reload", "Reloading Fluxer", "run");
         const wc = views[0]; // (one Fluxer view is enough to judge by)
@@ -494,7 +494,7 @@ module.exports = function createFluxerFix(o) {
         } else page = { url: "", kind: "failed", text: r.desc + (r.code ? " (" + r.code + ")" : "") };
         watched = w.stop();
         page.failed = watched.failed; page.http = watched.http; page.errors = watched.errors; page.navs = watched.navs; page.crashed = watched.crashed;
-        const say = { ok: ["Fluxer is up and you're signed in", "ok"], login: ["Fluxer is up — you're signed out here, so sign in once", "warn"], migrating: ["Fluxer is moving you to fluxer.com — let it finish", "ok"], error: ["Fluxer's page loaded but shows an error", "fail"], booting: ["Fluxer's page stayed on its grey loading outline", "fail"], blank: ["Fluxer's page loaded but stayed blank", "fail"], unknown: ["Fluxer's page loaded", "ok"], failed: ["Fluxer's page didn't load", "fail"] }[page.kind] || ["Fluxer's page loaded", "ok"];
+        const say = { ok: ["Fluxer is up and you're signed in", "ok"], login: ["Fluxer is up - you're signed out here, so sign in once", "warn"], migrating: ["Fluxer is moving you to fluxer.com - let it finish", "ok"], error: ["Fluxer's page loaded but shows an error", "fail"], booting: ["Fluxer's page stayed on its grey loading outline", "fail"], blank: ["Fluxer's page loaded but stayed blank", "fail"], unknown: ["Fluxer's page loaded", "ok"], failed: ["Fluxer's page didn't load", "fail"] }[page.kind] || ["Fluxer's page loaded", "ok"];
         const what = [];
         if (page.failed.length) what.push("Didn't load: " + page.failed.slice(0, 3).map((f) => f.url + " (" + f.error + ")").join(", "));
         if (page.http.length) what.push("Refused: " + page.http.slice(0, 3).map((f) => f.url + " (HTTP " + f.status + ")").join(", "));
@@ -505,16 +505,16 @@ module.exports = function createFluxerFix(o) {
         // files that failed over the fast "QUIC" connection: BelleCord uses the regular one from the next start
         if (say[1] === "fail" && !quic0 && !s.noQuic && page.failed.some((f) => /QUIC/.test(f.error))) {
           s.noQuic = true; restartNeeded = true; save(s);
-          step("reload", "Fluxer's files fail over the fast connection type (QUIC) on your network — restart BelleCord to use the regular one", "warn", what.join("\n"));
-          finding = finding || "Your network breaks the fast “QUIC” connection that Fluxer's files come over.";
+          step("reload", "Fluxer's files fail over the fast connection type (QUIC) on your network - restart BelleCord to use the regular one", "warn", what.join("\n"));
+          finding = finding || "Your network breaks the fast \"QUIC\" connection that Fluxer's files come over.";
         } else if (say[1] === "fail") {
           const f = page.failed[0], hcode = page.http.find((x) => x.status === 429 || x.status === 403 || x.status >= 500);
           if (f) finding = finding || "Fluxer's page couldn't load " + f.url + " (" + f.error + ").";
-          else if (hcode) finding = finding || "Fluxer's servers refused " + hcode.url + " (HTTP " + hcode.status + (hcode.status === 429 ? ": too many requests — Fluxer is slowing this connection down" : "") + ").";
+          else if (hcode) finding = finding || "Fluxer's servers refused " + hcode.url + " (HTTP " + hcode.status + (hcode.status === 429 ? ": too many requests - Fluxer is slowing this connection down" : "") + ").";
           else if (page.crashed) finding = finding || "Fluxer's page crashed (" + page.crashed + ").";
           else if (page.errors.length) finding = finding || "Fluxer's page starts but its code stops with an error: " + page.errors[0];
           else finding = finding || "Fluxer's page loads but never starts, and nothing failed to download.";
-          youDo.push({ text: "Try “Open Fluxer in a clean window”. If Fluxer works there, BelleCord's look is what's breaking it" + (helpLine ? " — " + helpLine : "") + ". If it doesn't, check whether Fluxer opens in your normal browser, then try “Sign out & start fresh”.", action: "clean" });
+          youDo.push({ text: "Try \"Open Fluxer in a clean window\". If Fluxer works there, BelleCord's look is what's breaking it" + (helpLine ? " - " + helpLine : "") + ". If it doesn't, check whether Fluxer opens in your normal browser, then try \"Sign out & start fresh\".", action: "clean" });
         }
       } else step("reload", "Open the Fluxer side to finish", "skip");
 
@@ -540,7 +540,7 @@ module.exports = function createFluxerFix(o) {
     } else L.push("App files: not checked");
     L.push("Secure DNS " + (s.secureDns ? "on" : "off") + " · pinned " + (Object.entries(s.pins || {}).map(([h, ips]) => h + "→" + ips[0] + " (" + ((s.pinWhy || {})[h] || "hosts") + ")").join(", ") || "none") + " · QUIC " + (s.noQuic ? "off" : "on") + " · direct " + (s.direct ? "on" : "off") + " · using " + (s.home || HOMES[0]));
     if (page) {
-      L.push("Page: " + page.kind + " " + (page.url || "") + (page.text ? " — " + page.text : ""));
+      L.push("Page: " + page.kind + " " + (page.url || "") + (page.text ? " - " + page.text : ""));
       if (page.navs && page.navs.length) L.push("Went to: " + page.navs.join(" → "));
       if (page.failed && page.failed.length) L.push("Didn't load: " + page.failed.map((f) => f.url + " " + f.error + (f.type ? " [" + f.type + "]" : "")).join(" | "));
       if (page.http && page.http.length) L.push("Refused: " + page.http.map((f) => f.url + " " + f.status).join(" | "));

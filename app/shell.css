@@ -219,7 +219,7 @@ h3.sub .keep{margin-left:10px}
 .emojipop button{background:transparent;padding:0;width:32px;height:32px;font-size:18px}.emojipop button:hover{background:var(--hover)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
-/* the intro (the same one as Belle's BelleCord) */
+/* the intro (the same one as in my own BelleCord) */
 #bcsplash{position:fixed;inset:0;z-index:99999;background:#0d0405;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;animation:bcsOut .5s ease 2.5s forwards;font-family:"Segoe UI",system-ui,sans-serif}
 #bcsplash[hidden]{display:none}
 #bcsplash .hex{position:absolute;inset:-20%;background-image:radial-gradient(circle at 50% 50%,rgba(224,48,30,.18) 0 2px,transparent 3px);background-size:26px 45px;opacity:0;animation:bcsHex 1.6s ease .1s forwards;transform:rotate(-8deg)}
