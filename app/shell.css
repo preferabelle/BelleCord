@@ -202,7 +202,7 @@ button.chip:hover{background:var(--raised)}
 .tp .lbl{position:absolute;right:6px;bottom:4px;font-size:10px;color:var(--tt);opacity:.8}
 .pieces{display:flex;flex-direction:column;gap:12px}
 .prow{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start}
-.prow>b{color:var(--strong);font-size:13px;padding-top:6px}
+.prow>b{color:var(--strong);font-size:13px;padding-top:6px;text-shadow:0 1px 3px color-mix(in srgb,var(--bg) 85%,transparent),0 0 1px var(--bg)}
 .popts{display:flex;flex-wrap:wrap;gap:6px}
 .popt{background:var(--side);color:var(--text);font-size:13px;padding:6px 10px;display:inline-flex;align-items:center;gap:6px;border:1px solid transparent}
 .popt:hover{border-color:var(--line);filter:none}.popt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 18%,var(--side))}
@@ -293,8 +293,10 @@ body.mac #bar{padding:0 12px 0 80px}
 .tplwrap{margin:0 0 14px;padding:12px;border-radius:var(--r);background:color-mix(in srgb,var(--side) 60%,var(--main))}.tplwrap[hidden]{display:none}
 .tplbar{margin-bottom:10px}.tplbar .tplsearch{margin-left:0}
 #tpl-toggle.on{box-shadow:inset 0 -2px 0 var(--accent)}
-.popts .pgrp{display:flex;gap:6px;align-items:flex-start;width:100%}.popts .pgrp+.pgrp{margin-top:2px}
-.popts .pgl{width:44px;flex:none;padding-top:8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+/* Dark and Light: rows of their own under Colors, labeled in the label column like every other row */
+.prow.sub{margin-top:-2px}.prow.sub>b{position:relative;padding-left:17px;display:flex;align-items:center;gap:5px}
+.prow.sub>b::before{content:'';position:absolute;left:4px;top:-6px;height:18px;width:8px;border-left:2px solid color-mix(in srgb,var(--strong) 30%,transparent);border-bottom:2px solid color-mix(in srgb,var(--strong) 30%,transparent);border-bottom-left-radius:5px}
+.prow.sub>b .ico{font-size:12px;line-height:1}
 .popts .pbtns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
 .fail .fxfix[hidden]{display:none}
 /* the Fix Fluxer window */
@@ -303,11 +305,12 @@ body.mac #bar{padding:0 12px 0 80px}
 #fxmodal .fxhd{padding:18px 20px 6px;display:flex;align-items:center;gap:12px}#fxmodal .fxhd h2{margin:0;font-size:19px;color:var(--strong);flex:1}
 #fxmodal .fxx{background:transparent;color:var(--dim);font-size:16px;padding:4px 8px}#fxmodal .fxx:hover{color:var(--strong)}
 #fxmodal .fxhead{padding:0 20px 8px;font-size:14px;color:var(--dim)}#fxmodal .fxhead.good{color:#23a55a}#fxmodal .fxhead.bad{color:#f0b232}
+#fxmodal .fxfound{margin:2px 20px 8px;padding:10px 12px;border-radius:var(--r);background:var(--side);border-left:3px solid #f0b232;font-size:14px;line-height:1.4;color:var(--strong)}#fxmodal .fxfound b{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:3px}#fxmodal .fxfound.fixed{border-left-color:#23a55a}
 #fxmodal ol{list-style:none;margin:6px 0 0;padding:0 20px 6px}
 #fxmodal li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.35}
 #fxmodal li .i{width:20px;flex:none;text-align:center;font-weight:800}#fxmodal li .d{display:block;font-size:12px;color:var(--dim);white-space:pre-wrap;margin-top:2px}
-#fxmodal li.ok .i,#fxmodal li.fixed .i{color:#23a55a}#fxmodal li.warn .i{color:#f0b232}#fxmodal li.fail .i{color:#f23f43}#fxmodal li.skip{opacity:.6}
-#fxmodal li.run .i::before{content:"";display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:fxspin .8s linear infinite}
+#fxmodal li[data-st=ok] .i,#fxmodal li[data-st=fixed] .i{color:#23a55a}#fxmodal li[data-st=warn] .i{color:#f0b232}#fxmodal li[data-st=fail] .i{color:#f23f43}#fxmodal li[data-st=skip]{opacity:.6}
+#fxmodal li[data-st=run] .i::before{content:"";display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:fxspin .8s linear infinite}
 @keyframes fxspin{to{transform:rotate(360deg)}}
 #fxmodal .fxtodo{margin:10px 20px 4px;padding:12px 14px;background:var(--side);border-radius:calc(var(--r) * .8);border-left:3px solid #f0b232}#fxmodal .fxtodo b{color:var(--strong);font-size:13px}
 #fxmodal .fxtodo p{margin:8px 0 0;font-size:13px;line-height:1.45}#fxmodal .fxtodo button{margin-top:6px}

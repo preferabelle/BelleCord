@@ -499,10 +499,11 @@
       if (cat.key === "font" && o.stack) return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '" style="font-family:' + esc(o.stack) + '">' + esc(o.name) + "</button>";
       return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '">' + sw + esc(o.name) + "</button>";
     };
-    // the colors come in groups: Fluxer's own, then darks, then lights (each in color order, see themes.js)
-    const group = (cat, label, keys) => (keys.length ? '<div class="pgrp"><span class="pgl">' + label + '</span><div class="pbtns">' + keys.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" : "");
-    const paletteOpts = (cat) => group(cat, "", T.PALETTE_GROUPS.own) + group(cat, "Dark", T.PALETTE_GROUPS.dark) + group(cat, "Light", T.PALETTE_GROUPS.light);
-    const rows = T.CATS.map((cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + (cat.key === "palette" && T.PALETTE_GROUPS ? paletteOpts(cat) : Object.entries(cat.set).map(([k, o]) => optOf(cat, k, o)).join("")) + "</div></div>").join("") +
+    // the colors: Fluxer's own on the Colors row, then a Dark row and a Light row under it, labeled in the same
+    // column as every other row (each group in color order, see themes.js)
+    const sub = (cat, icon, label, keys) => (keys.length ? '<div class="prow sub"><b><span class="ico" aria-hidden="true">' + icon + "</span>" + label + '</b><div class="popts">' + keys.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" : "");
+    const paletteRows = (cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + T.PALETTE_GROUPS.own.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" + sub(cat, "🌙", "Dark", T.PALETTE_GROUPS.dark) + sub(cat, "☀️", "Light", T.PALETTE_GROUPS.light);
+    const rows = T.CATS.map((cat) => (cat.key === "palette" && T.PALETTE_GROUPS ? paletteRows(cat) : '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + Object.entries(cat.set).map(([k, o]) => optOf(cat, k, o)).join("") + "</div></div>")).join("") +
       '<div class="prow"><b>Effects</b><div class="popts">' + Object.entries(T.EFFECTS).map(([k, o]) => '<button class="popt' + ((stack.effects || []).includes(k) ? " on" : "") + '" data-fx="' + k + '" title="' + esc(o.hint) + '">' + esc(o.name) + "</button>").join("") + "</div></div>";
     setHtml($("pieces"), rows);
     $("pieces").querySelectorAll("[data-cat]").forEach((b) => { b.onclick = () => setTheme({ [b.dataset.cat]: b.dataset.k }); b.onmouseenter = () => showMini({ ...P("theme"), [b.dataset.cat]: b.dataset.k }); b.onmouseleave = () => showMini(); });
@@ -930,7 +931,7 @@
     let m = $("fxmodal");
     if (m) return m;
     m = document.createElement("div"); m.id = "fxmodal";
-    m.innerHTML = '<div class="fxbox" role="dialog" aria-label="Fix Fluxer"><div class="fxhd"><h2>Fix Fluxer</h2><button class="fxx" title="Close">✕</button></div><div class="fxhead"></div><ol></ol><div class="fxtodos"></div><pre class="fxtech"></pre><div class="fxft"></div></div>';
+    m.innerHTML = '<div class="fxbox" role="dialog" aria-label="Fix Fluxer"><div class="fxhd"><h2>Fix Fluxer</h2><button class="fxx" title="Close">✕</button></div><div class="fxhead"></div><div class="fxfound" hidden></div><ol></ol><div class="fxtodos"></div><pre class="fxtech"></pre><div class="fxft"></div></div>';
     m.querySelector(".fxx").onclick = () => { if (!fxRunning) m.remove(); };
     m.addEventListener("click", (e) => { if (e.target === m && !fxRunning) m.remove(); });
     document.body.appendChild(m);
@@ -940,12 +941,12 @@
     const ol = m.querySelector("ol");
     let li = [...ol.children].find((x) => x.dataset.id === st.id);
     if (!li) { li = document.createElement("li"); li.dataset.id = st.id; ol.appendChild(li); }
-    li.className = st.status || "run";
+    li.dataset.st = st.status || "run"; // (not a class: "fail" is already the Fluxer side's full-screen trouble page)
     li.innerHTML = '<span class="i">' + (FX_ICON[st.status] ?? "") + "</span><span>" + esc(st.label) + (st.detail ? '<span class="d">' + esc(st.detail) + "</span>" : "") + "</span>";
   }
   function fxPaintCard(r) {
     const el = $("fx-msg"); if (!el) return;
-    el.textContent = !r ? "" : r.restartNeeded ? "Last check: restart BelleCord to finish the fix." : r.ok ? "Last check: Fluxer was working." : "Last check: Fluxer still had trouble — press Fix Fluxer to see what's left.";
+    el.textContent = !r ? "" : r.restartNeeded ? "Last check: restart BelleCord to finish the fix." : r.ok ? "Last check: Fluxer was working." : "Last check: " + (r.finding || "Fluxer still had trouble.") + " Press Fix Fluxer to see what's left.";
   }
   async function fixFluxer() {
     if (fxRunning) { fxModal(); return; }
@@ -953,8 +954,9 @@
     fxRunning = true;
     const m = fxModal();
     m.querySelector("ol").innerHTML = ""; m.querySelector(".fxtodos").innerHTML = ""; m.querySelector(".fxft").innerHTML = ""; m.querySelector(".fxtech").textContent = "";
+    const found = m.querySelector(".fxfound"); found.hidden = true; found.className = "fxfound";
     const head = m.querySelector(".fxhead");
-    head.className = "fxhead"; head.textContent = "Looking at what's wrong, then fixing what can be fixed. This takes up to a minute.";
+    head.className = "fxhead"; head.textContent = "Looking at every part of Fluxer, then fixing what can be fixed. This takes a minute or two.";
     let report = null;
     try { report = await host.fixFluxer(); } catch (e) { fxStep(m, { id: "app", label: "Fix Fluxer stopped: " + (e.message || e), status: "fail" }); }
     fxRunning = false;
@@ -963,18 +965,21 @@
     if (report && report.restartNeeded) { head.className = "fxhead bad"; head.textContent = "Almost there — restart BelleCord to finish."; }
     else if (report && report.ok) { head.className = "fxhead good"; head.textContent = fixedSomething ? "Fluxer should be working now. ✓" : "Everything checks out — Fluxer is working. ✓"; }
     else { head.className = "fxhead bad"; head.textContent = report ? "Fluxer still isn't working from this computer — here's what's left:" : "Close BelleCord completely, open it again, then press Fix Fluxer again."; }
+    // the cause, in one line (fixed, or what's still in the way)
+    if (report && report.finding) { found.hidden = false; found.className = "fxfound" + (report.ok ? " fixed" : ""); found.innerHTML = "<b>" + (report.ok ? "What was wrong" : "What's wrong") + "</b>" + esc(report.finding); }
     // what's left for you
     const todos = (report && report.youDo) || [];
-    const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()] };
+    const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()], browser: ["Open Fluxer in my browser", () => host.fluxerHelp && host.fluxerHelp("browser")] };
     m.querySelector(".fxtodos").innerHTML = todos.length ? '<div class="fxtodo"><b>What you need to do</b>' + todos.map((t, i) => "<p>" + esc(t.text) + (t.action && ACT[t.action] ? '<br><button data-act="' + i + '">' + esc(ACT[t.action][0]) + "</button>" : "") + "</p>").join("") + "</div>" : "";
     m.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { const t = todos[Number(b.dataset.act)]; try { ACT[t.action][1](); } catch {} }));
-    // the details (for a screenshot to Belle)
+    // the details (for a screenshot to me)
     m.querySelector(".fxtech").textContent = (report && report.tech) || "No details (Fix Fluxer didn't run).";
     const ft = m.querySelector(".fxft");
     const btn = (label, cls, fn) => { const b = document.createElement("button"); if (cls) b.className = cls; b.textContent = label; b.onclick = fn; ft.appendChild(b); return b; };
     btn("Details", "ghost", () => m.querySelector(".fxtech").classList.toggle("on"));
     btn("Copy details", "ghost", async (e) => { try { await navigator.clipboard.writeText(m.querySelector(".fxtech").textContent); e.target.textContent = "Copied ✓"; } catch { m.querySelector(".fxtech").classList.add("on"); } });
     if (host.fluxerClean && !todos.some((t) => t.action === "clean")) btn("Open Fluxer in a clean window", "", () => host.fluxerClean());
+    if (report && !report.ok && host.fluxerHelp && !todos.some((t) => t.action === "browser")) btn("Open Fluxer in my browser", "", () => host.fluxerHelp("browser"));
     if (host.fluxerReset) {
       const r = btn("Sign out & start fresh", "", async () => {
         if (!r.dataset.sure) { r.dataset.sure = "1"; r.textContent = "Really? This signs you out of Fluxer here — click again"; r.classList.add("danger"); setTimeout(() => { if (r.isConnected) { delete r.dataset.sure; r.textContent = "Sign out & start fresh"; r.classList.remove("danger"); } }, 5000); return; }
@@ -1003,7 +1008,7 @@
   if ($("fx-fix")) $("fx-fix").onclick = () => fixFluxer();
   async function fxInit() {
     if (!host.fixFluxer) { const c = $("conncard"); if (c) c.hidden = true; return; }
-    try { const last = host.fluxerLast ? await host.fluxerLast() : null; if (last && last.at) fxPaintCard({ ok: !!last.ok }); } catch {}
+    try { const last = host.fluxerLast ? await host.fluxerLast() : null; if (last && last.at) fxPaintCard({ ok: !!last.ok, finding: last.finding || "" }); } catch {}
     // Fix Fluxer found web.fluxer.app not answering and moved you to fluxer.com: Fluxer opens there from now on
     try {
       const home = String((host.fluxerHome && (await host.fluxerHome())) || "").replace(/\/+$/, "");
