@@ -20,9 +20,12 @@ WHAT'S IN IT
 - Ctrl+1 Fluxer, Ctrl+2 Discord, Ctrl+3 both, Ctrl+4 dashboard (Cmd on Mac).
 - T, P and X in the title bar: TikTok, Pinterest and X.
 - Closing the window keeps it running in the tray (you can turn that off on the dashboard).
+- Animations: Off, Smooth or Ultra, in the App section of the dashboard.
+- Want to share it? "Send BelleCord to a friend" in the App section gives you a link and a message to send.
 
 THE DASHBOARD
 Inbox, voice channels, who's online, today's stats, countdowns, skins, game badges and themes.
+Game badges fill in from your real profile for Overwatch, Minecraft, Roblox, Dota 2, the chess sites and more.
 
 GOOD TO KNOW
 - Pinterest: Google sign-in doesn't work in the app. Use the QR code or your email and password.

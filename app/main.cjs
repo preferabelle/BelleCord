@@ -96,9 +96,9 @@ function hubAddress() {
 ipcMain.handle("hub", async (e, method, route, payload) => {
   const base = hubAddress();
   if (!base) return { ok: false, status: 0, error: "offline" };
-  if (!/^\/v1\/[a-z/]+(\?[^#\s]*)?$/i.test(String(route)) || !["GET", "POST"].includes(method)) return { ok: false, status: 400, error: "bad request" };
+  if (!/^\/v1\/[a-z0-9/]+(\?[^#\s]*)?$/i.test(String(route)) || !["GET", "POST"].includes(method)) return { ok: false, status: 400, error: "bad request" };
   try {
-    const r = await fetch(base + route, { method, headers: { "content-type": "application/json", "ngrok-skip-browser-warning": "1", "user-agent": "BelleCord" }, body: method === "POST" ? JSON.stringify(payload || {}) : undefined, signal: AbortSignal.timeout(12000) });
+    const r = await fetch(base + route, { method, headers: { "content-type": "application/json", "ngrok-skip-browser-warning": "1", "user-agent": "BelleCord" }, body: method === "POST" ? JSON.stringify(payload || {}) : undefined, signal: AbortSignal.timeout(/^\/v1\/live\//.test(String(route)) ? 25000 : 12000) }); // (live stats can take a moment: Roblox is several lookups)
     const data = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, data, error: r.ok ? null : data.error || "hub error " + r.status };
   } catch { return { ok: false, status: 0, error: "offline" }; }

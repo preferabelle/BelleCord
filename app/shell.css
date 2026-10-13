@@ -273,6 +273,10 @@ h3.sub .keep{margin-left:10px}
 .gcbox .gmuted{font-size:12px;color:#949ba4}.gcbox .gwarn{font-size:12px;color:#f0b232}
 .gcbox .gacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}.gcbox .gacts button{font-size:13px}
 .gcbox .gswitch{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0}
+.gcbox img.px{image-rendering:pixelated}
+.gcbox .gfigl img.gfig{width:auto;height:112px;max-width:112px;border-radius:8px;object-fit:contain;background:rgba(0,0,0,.18)}
+.gcbox .gmore{display:flex;flex-wrap:wrap;gap:6px}.gcbox .gmore span{font-size:12px;color:#dbdee1;background:#1e1f22;border-radius:999px;padding:4px 10px}
+.gbedit .livesays{grid-column:1/-1;font-size:12px;opacity:.78;line-height:1.45}
 
 /* Mac: the window buttons sit on the left of the title bar */
 body.mac #bar{padding:0 12px 0 80px}
@@ -300,6 +304,15 @@ body.mac #bar{padding:0 12px 0 80px}
 .popts .pbtns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
 .fail .fxfix[hidden]{display:none}
 /* the Fix Fluxer window */
+/* sending BelleCord to a friend */
+#sharebox{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
+#sharebox .shbox{position:relative;width:min(520px,96vw);max-height:88vh;overflow:auto;background:var(--bg);color:var(--text);border-radius:calc(var(--r) * 1.4);box-shadow:0 18px 60px rgba(0,0,0,.55);border-top:3px solid var(--accent);padding:20px 22px 22px}
+#sharebox h2{margin:0 0 6px;font-size:19px;color:var(--strong)}#sharebox p{margin:0 0 10px;color:var(--dim);font-size:14px;line-height:1.45}
+#sharebox label{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:12px 0 6px}
+#sharebox .shrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}#sharebox .shrow input{flex:1;min-width:0}
+#sharebox textarea{width:100%;box-sizing:border-box;min-height:140px;resize:vertical;background:var(--side);color:var(--text);border:1px solid var(--line);border-radius:var(--r);padding:9px 10px;font:inherit;font-size:14px;line-height:1.45}
+#sharebox .shx{position:absolute;top:12px;right:12px;background:transparent;color:var(--dim);font-size:16px;padding:4px 8px}#sharebox .shx:hover{color:var(--strong)}
+#sharebox .shmsg{font-size:13px;color:#23a55a;min-height:18px;margin-top:8px}
 #fxmodal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
 #fxmodal .fxbox{width:min(560px,96vw);max-height:88vh;overflow:auto;background:var(--bg);color:var(--text);border-radius:calc(var(--r) * 1.4);box-shadow:0 18px 60px rgba(0,0,0,.55);border-top:3px solid var(--accent)}
 #fxmodal .fxhd{padding:18px 20px 6px;display:flex;align-items:center;gap:12px}#fxmodal .fxhd h2{margin:0;font-size:19px;color:var(--strong);flex:1}
@@ -406,8 +419,8 @@ button:active:not(:disabled){transform:scale(.97);transition-duration:60ms}
 .heropic::after{transition:opacity var(--t2) var(--ease)}
 
 /* windows and menus: they pop open instead of just appearing */
-#fxmodal,#gcard:not([hidden]),#namebox{animation:bcFade var(--t2) var(--ease) both}
-#fxmodal .fxbox,#gcard:not([hidden]) .gcbox,#namebox form{animation:bcOpen var(--t3) var(--spring) both}
+#fxmodal,#gcard:not([hidden]),#namebox,#sharebox{animation:bcFade var(--t2) var(--ease) both}
+#fxmodal .fxbox,#gcard:not([hidden]) .gcbox,#namebox form,#sharebox .shbox{animation:bcOpen var(--t3) var(--spring) both}
 #addmenu:not([hidden]),.emojipop{animation:bcMenu var(--t2) var(--spring) both;transform-origin:bottom left}
 #sidepanel:not([hidden]){animation:bcPanel var(--t3) var(--ease) both}
 #fxmodal li{animation:bcRise var(--t2) var(--ease) both}

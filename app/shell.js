@@ -804,6 +804,15 @@
   }.toString() + ")()";
   $("wv-fluxer").addEventListener("dom-ready", () => { $("wv-fluxer").executeJavaScript(STICK).catch(() => {}); });
 
+  // ---- live stats: which games the badge hub can fill in from the real profile right now ----
+  let liveGames = null; // (until the hub answers: Overwatch and the chess sites, like before)
+  const OLD_LIVE = new Set(["overwatch", "chess", "lichess"]);
+  const isLive = (game) => !!(game && game.live && (liveGames ? liveGames.has(game.live) : OLD_LIVE.has(game.live)));
+  const locked = (game, what) => isLive(game) && (game.lock || ["rank", "stats"]).includes(what); // (what live stats replace: nobody can type in a fake rank)
+  async function loadLiveGames() { const r = await hub("GET", "/v1/live"); if (r.ok && r.data && Array.isArray(r.data.games)) liveGames = new Set(r.data.games); }
+  loadLiveGames(); setInterval(loadLiveGames, 15 * 60000);
+  const cap = (t) => { t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
+
   // ---- the card you get when you click a badge ----
   const cardEsc = esc;
   async function openCard(key, gameKey, liveFresh) {
@@ -813,11 +822,11 @@
     const g = person.games[game.key];
     if (!g) return;
     let live = null, liveErr = null;
-    if (game.live && g.handle && g.tracking !== false) {
+    if (isLive(game) && g.handle && g.tracking !== false) {
       drawCard(person, key, game, g, null, null, true);
-      const r = await hub("GET", "/v1/live/" + game.live + "?handle=" + encodeURIComponent(g.handle) + (liveFresh ? "&t=" + Date.now() : ""));
-      if (r.ok) live = r.data; else liveErr = r.status === 404 ? "Couldn't find " + g.handle : r.error === "offline" ? null : "Live stats aren't available right now";
-      if (live && live.private) liveErr = "Career profile is private";
+      const r = await hub("GET", "/v1/live/" + game.live + "?handle=" + encodeURIComponent(g.handle) + (game.key === "osu" && g.rank ? "&mode=" + encodeURIComponent(g.rank) : "") + (liveFresh ? "&t=" + Date.now() : ""));
+      if (r.ok) live = r.data; else liveErr = r.status === 404 ? "Couldn't find " + g.handle : r.status === 400 && r.data && r.data.error ? cap(r.data.error) : r.error === "offline" ? null : "Live stats aren't available right now";
+      if (live && live.private) liveErr = live.privateWhy || "Career profile is private";
     }
     drawCard(person, key, game, g, live, liveErr, false);
   }
@@ -825,32 +834,40 @@
     const box = $("gcard").querySelector(".gcbox"), L = live || {};
     const accent = g.accent || game.color;
     const av = L.avatar || person.avatar;
-    const real = !!game.live; // (a game with live stats shows only those: nobody can type in their own rank or stats)
-    const stats = {}; if (!real) for (const [k, v] of Object.entries(g.stats || {})) if (v) stats[k] = v; for (const [k, v] of Object.entries(L.stats || {})) if (v) stats[k] = v;
-    const rr = {}; if (!real) for (const [k, v] of Object.entries(g.roleRanks || {})) if (v) rr[k] = v; for (const [k, v] of Object.entries(L.roleRanks || {})) if (v) rr[k] = v;
-    const ranks = Object.keys(rr).length ? Object.entries(rr) : g.rank && !real ? [[game.rankLabel || "Rank", g.rank + (g.rankDetail ? " " + g.rankDetail : "")]] : [];
+    const lockRank = locked(game, "rank"), lockStats = locked(game, "stats");
+    const stats = {}; if (!lockStats) for (const [k, v] of Object.entries(g.stats || {})) if (v) stats[k] = v; for (const [k, v] of Object.entries(L.stats || {})) if (v) stats[k] = v;
+    const rr = {};
+    if (!lockRank) { for (const [k, v] of Object.entries(g.roleRanks || {})) if (v) rr[k] = v; if (!Object.keys(rr).length && g.rank) rr[game.rankLabel || "Rank"] = g.rank + (g.rankDetail ? " " + g.rankDetail : ""); }
+    for (const [k, v] of Object.entries(L.roleRanks || {})) if (v) rr[k] = v;
+    const ranks = Object.entries(rr);
     const main = g.main || L.main, mainPic = g.main ? (L.portraits && L.portraits[String(g.main).toLowerCase()]) || null : L.mainPortrait || null;
     const most = g.main && L.main && String(L.main).toLowerCase() !== String(g.main).toLowerCase() ? L.main : "";
-    const sticker = g.showSticker !== false ? g.sticker || mainPic || null : null;
+    const mainTitle = main ? (/^Main /.test(game.mainLabel || "") ? "Mains " + main : main) : g.role;
+    const mainSmall = [main && g.role ? g.role : "", most ? (L.mainNote ? L.mainNote.split(" · ")[0] : "Most played") + ": " + most : !g.main && L.mainNote ? L.mainNote : game.mainLabel && main ? game.mainLabel : ""].filter(Boolean).join(" · ");
+    const sticker = g.showSticker !== false ? g.sticker || null : null;
+    const px = (u) => (/^data:image\/png/.test(u || "") ? " px" : ""); // (Minecraft pictures stay crisp pixels)
     const others = badgeList(person).filter((b) => b.key !== game.key);
     box.style.setProperty("--gc", accent);
     box.style.setProperty("--gcard", L.banner ? 'url("' + L.banner + '")' : "linear-gradient(135deg," + accent + ",#24262b)");
     box.innerHTML =
       (others.length ? '<div class="gswitch">' + badgeList(person).map((b) => '<button class="gb" data-g="' + b.key + '" title="' + cardEsc(b.name) + '" style="background:' + b.color + (b.key === game.key ? ";box-shadow:0 0 0 2px #fff" : "") + '">' + (G.icon(b.key) || cardEsc(b.glyph)) + "</button>").join("") + "</div>" : "") +
-      '<div class="gtop">' + (av ? '<img class="gav" src="' + cardEsc(av) + '" alt="">' : '<span class="gav" style="background:' + accent + '">' + cardEsc((person.name || "?").slice(0, 1)) + "</span>") +
-      '<div><div class="gk">' + cardEsc(game.name) + ' profile</div><h2>' + cardEsc(L.name || String(g.handle || person.name || game.name).split("#")[0]) + '</h2><div class="gtag">' + cardEsc(g.handle || "") + (L.title ? " · " + cardEsc(L.title) : "") + "</div></div></div>" +
+      '<div class="gtop">' + (av ? '<img class="gav' + px(av) + '" src="' + cardEsc(av) + '" alt="">' : '<span class="gav" style="background:' + accent + '">' + cardEsc((person.name || "?").slice(0, 1)) + "</span>") +
+      '<div><div class="gk">' + cardEsc(game.name) + ' profile</div><h2>' + cardEsc(L.name || String(g.handle || person.name || game.name).split("#")[0]) + '</h2><div class="gtag">' + cardEsc([/^https?:/.test(g.handle || "") || (L.title && L.title.toLowerCase() === "@" + String(g.handle || "").toLowerCase()) ? "" : g.handle || "", L.title || ""].filter(Boolean).join(" · ")) + "</div></div></div>" +
       '<div class="gbody">' +
       (g.tagline ? '<div class="gline"><div><b>' + cardEsc(g.tagline) + "</b></div></div>" : "") +
-      (main || g.role ? '<div class="gline">' + (mainPic ? '<img src="' + cardEsc(mainPic) + '" alt="">' : "") + "<div><b>" + cardEsc(main ? "Mains " + main : g.role) + "</b><small>" + cardEsc([main && g.role ? g.role : "", most ? "Most played: " + most : game.mainLabel && main ? game.mainLabel : ""].filter(Boolean).join(" · ")) + "</small></div></div>" : "") +
+      (main || g.role ? '<div class="gline">' + (mainPic ? '<img src="' + cardEsc(mainPic) + '" alt="">' : "") + "<div><b>" + cardEsc(mainTitle) + "</b><small>" + cardEsc(mainSmall) + "</small></div></div>" : "") +
+      (L.figure ? '<div class="gline gfigl"><img class="gfig' + px(L.figure) + '" src="' + cardEsc(L.figure) + '" alt=""><div><b>' + cardEsc(L.figureLabel || "Look") + "</b>" + (L.figureNote ? "<small>" + cardEsc(L.figureNote) + "</small>" : "") + "</div></div>" : "") +
       (sticker ? '<div class="gline"><img src="' + cardEsc(sticker) + '" alt="" style="width:64px;height:64px"><div><b>Sticker</b></div></div>' : "") +
       (g.showRank !== false && ranks.length ? '<div class="ggrid">' + ranks.map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
       (g.showStats !== false && Object.keys(stats).length ? '<div class="ggrid">' + Object.entries(stats).map(([k, v]) => '<div class="gstat"><b>' + cardEsc(k) + "</b><span>" + cardEsc(v) + "</span></div>").join("") + "</div>" : "") +
+      (Array.isArray(L.more) && L.more.length ? '<div class="gmore">' + L.more.slice(0, 6).map((t) => "<span>" + cardEsc(t) + "</span>").join("") + "</div>" : "") +
       (L.endorsement ? '<div class="gmuted">Endorsement level ' + cardEsc(L.endorsement) + "</div>" : "") +
       (loading ? '<div class="gmuted">Loading stats...</div>' : "") + (liveErr ? '<div class="gwarn">' + cardEsc(liveErr) + "</div>" : "") +
-      '<div class="gacts"><button id="gc-x">Close</button>' + (game.live && g.handle && g.tracking !== false ? '<button id="gc-r">Refresh</button>' : "") + (key === "me" || isMine(key) ? '<button class="primary" id="gc-e">Customize</button>' : "") + "</div></div>";
+      '<div class="gacts"><button id="gc-x">Close</button>' + (isLive(game) && g.handle && g.tracking !== false ? '<button id="gc-r">Refresh</button>' : "") + (/^https:\/\//.test(L.link || "") ? '<button id="gc-o">Open profile</button>' : "") + (key === "me" || isMine(key) ? '<button class="primary" id="gc-e">Customize</button>' : "") + "</div></div>";
     $("gcard").hidden = false;
     box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
     const rf = box.querySelector("#gc-r"); if (rf) rf.onclick = () => openCard(key, game.key, true);
+    const op = box.querySelector("#gc-o"); if (op) op.onclick = () => host.openExternal(L.link);
     const ed = box.querySelector("#gc-e"); if (ed) ed.onclick = () => { $("gcard").hidden = true; setMode("dash"); editGame(game.key); $("s-badges").scrollIntoView({ behavior: "smooth" }); };
     box.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openCard(key, b.dataset.g)));
   }
@@ -858,6 +875,14 @@
   const isMine = (k) => { const me = P("me"); return SIDES.some((s2) => me[s2] && k === s2 + ":" + me[s2].id); };
   function myPerson() { return { name: P("myName"), avatar: (P("me").fluxer || P("me").discord || {}).avatar || "", games: (P("myBadges") || {}).games || {} }; }
 
+  // what an account name looks like for the games whose live stats need it exactly right
+  const HANDLE_OK = {
+    overwatch: [/^[^#\s]{2,32}#\d{3,8}$/, "A BattleTag looks like Name#1234"],
+    valorant: [/^[^#]{3,16}#[A-Za-z0-9]{2,5}$/, "A Riot ID looks like Name#TAG"],
+    league: [/^[^#]{3,16}#[A-Za-z0-9]{2,5}$/, "A Riot ID looks like Name#TAG"],
+    minecraft: [/^[A-Za-z0-9_]{2,16}$/, "A Minecraft name is letters, numbers and _"],
+    roblox: [/^[A-Za-z0-9_]{3,20}$/, "Use your Roblox username (letters, numbers and _), not your display name"],
+  };
   // ---- your badges (dashboard) ----
   let editing = null;
   function paintBadges() {
@@ -873,26 +898,27 @@
     editing = key; paintBadges();
     const d = myPerson().games[key] || { enabled: true, tracking: true, showRank: true, showStats: true, showSticker: true };
     const opt = (list, sel, none) => '<option value="">' + none + "</option>" + list.map((x) => '<option' + (x === sel ? " selected" : "") + ">" + esc(x) + "</option>").join("") + (sel && !list.includes(sel) ? "<option selected>" + esc(sel) + "</option>" : "");
-    const isOW = key === "overwatch";
+    const lockRank = locked(game, "rank"), lockStats = locked(game, "stats");
     const box = $("gb-edit");
     box.innerHTML = '<h3><span class="gb" style="background:' + game.color + '">' + (G.icon(game.key) || esc(game.glyph)) + "</span>" + esc(game.name) + "</h3>" +
-      '<label>' + esc(game.handle) + '<input type="text" id="ge-handle" maxlength="40" placeholder="' + esc(game.hint) + '" value="' + esc(d.handle || "") + '"></label>' +
-      (game.ranks.length && !isOW ? '<label>' + esc(game.rankLabel || "Rank") + '<select id="ge-rank">' + opt(game.ranks, d.rank, "-") + "</select></label>" + (game.rankLabel ? "" : '<label>Division / number<input type="text" id="ge-rankd" maxlength="30" placeholder="2, 1534 LP..." value="' + esc(d.rankDetail || "") + '"></label>') : "") +
-      (isOW ? '<div style="grid-column:1/-1;font-size:12px;opacity:.75">Your ranks and stats come from your real Overwatch profile, so they can\'t be typed in.</div>' : game.roles ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "-") + "</select></label>" : "") +
+      '<label>' + esc(game.handle) + '<input type="text" id="ge-handle" maxlength="80" placeholder="' + esc(game.hint) + '" value="' + esc(d.handle || "") + '"></label>' +
+      (game.ranks.length && !lockRank ? '<label>' + esc(game.rankLabel || "Rank") + '<select id="ge-rank">' + opt(game.ranks, d.rank, "-") + "</select></label>" + (game.rankLabel ? "" : '<label>Division / number<input type="text" id="ge-rankd" maxlength="30" placeholder="2, 1534 LP..." value="' + esc(d.rankDetail || "") + '"></label>') : "") +
+      (isLive(game) && game.liveSays ? '<div class="livesays">' + esc(game.liveSays) + "</div>" : "") +
+      (game.roles && !(lockRank && key === "overwatch") ? '<label>Role<select id="ge-role">' + opt(game.roles, d.role, "-") + "</select></label>" : "") +
       '<label>' + esc(game.mainLabel) + (game.mains ? '<select id="ge-main">' + opt(game.mains, d.main, "-") + "</select>" : '<input type="text" id="ge-main" maxlength="40" value="' + esc(d.main || "") + '">') + "</label>" +
       '<label>Color<input type="color" id="ge-accent" value="' + esc(/^#[0-9a-f]{6}$/i.test(d.accent || "") ? d.accent : game.color) + '"></label>' +
       '<label class="wide">A line under the name<textarea id="ge-tag" maxlength="140">' + esc(d.tagline || "") + "</textarea></label>" +
-      '<div class="statrow">' + game.stats.map((st) => '<label>' + esc(st) + '<input type="text" data-st="' + esc(st) + '" maxlength="24" value="' + esc((d.stats || {})[st] || "") + '"></label>').join("") + "</div>" +
+      (lockStats ? "" : '<div class="statrow">' + game.stats.map((st) => '<label>' + esc(st) + '<input type="text" data-st="' + esc(st) + '" maxlength="24" value="' + esc((d.stats || {})[st] || "") + '"></label>').join("") + "</div>") +
       '<div class="acts"><button id="ge-st">' + (d.sticker ? "Change sticker" : "Sticker...") + "</button>" + (d.sticker ? '<button id="ge-stx">Remove sticker</button>' : "") + "</div>" +
-      '<div class="checks"><label><input type="checkbox" id="ge-on"' + (d.enabled !== false ? " checked" : "") + "> Show the badge</label>" + (game.live ? '<label><input type="checkbox" id="ge-live"' + (d.tracking !== false ? " checked" : "") + "> Live stats</label>" : "") + '<label><input type="checkbox" id="ge-sr"' + (d.showRank !== false ? " checked" : "") + '> Rank</label><label><input type="checkbox" id="ge-ss"' + (d.showStats !== false ? " checked" : "") + '> Stats</label><label><input type="checkbox" id="ge-sk"' + (d.showSticker !== false ? " checked" : "") + "> Sticker</label></div>" +
+      '<div class="checks"><label><input type="checkbox" id="ge-on"' + (d.enabled !== false ? " checked" : "") + "> Show the badge</label>" + (isLive(game) ? '<label><input type="checkbox" id="ge-live"' + (d.tracking !== false ? " checked" : "") + "> Live stats</label>" : "") + '<label><input type="checkbox" id="ge-sr"' + (d.showRank !== false ? " checked" : "") + '> Rank</label><label><input type="checkbox" id="ge-ss"' + (d.showStats !== false ? " checked" : "") + '> Stats</label><label><input type="checkbox" id="ge-sk"' + (d.showSticker !== false ? " checked" : "") + "> Sticker</label></div>" +
       '<div class="acts"><button class="primary" id="ge-save">Save</button><button id="ge-view">Preview</button>' + (myPerson().games[key] ? '<button id="ge-del">Remove</button>' : "") + '<button id="ge-close">Close</button><span class="msg" id="ge-msg"></span></div><div class="acts" id="ge-code" hidden></div>';
     box.hidden = false;
     let sticker = d.sticker || "";
     const q = (x) => box.querySelector(x);
     const collect = () => {
-      const stats = {}; box.querySelectorAll("[data-st]").forEach((i) => { if (i.value.trim()) stats[i.dataset.st] = i.value.trim(); });
+      const stats = lockStats ? { ...(d.stats || {}) } : {}; box.querySelectorAll("[data-st]").forEach((i) => { if (i.value.trim()) stats[i.dataset.st] = i.value.trim(); });
       const roleRanks = {}; box.querySelectorAll("[data-rr]").forEach((i) => { if (i.value) roleRanks[i.dataset.rr] = i.value; });
-      return { enabled: q("#ge-on").checked, handle: q("#ge-handle").value.trim(), rank: q("#ge-rank") ? q("#ge-rank").value : "", rankDetail: q("#ge-rankd") ? q("#ge-rankd").value.trim() : "", role: q("#ge-role") ? q("#ge-role").value : "", roleRanks, main: q("#ge-main").value.trim(), tagline: q("#ge-tag").value.trim(), accent: q("#ge-accent").value, stats, sticker, tracking: q("#ge-live") ? q("#ge-live").checked : true, showRank: q("#ge-sr").checked, showStats: q("#ge-ss").checked, showSticker: q("#ge-sk").checked };
+      return { enabled: q("#ge-on").checked, handle: q("#ge-handle").value.trim(), rank: q("#ge-rank") ? q("#ge-rank").value : lockRank ? d.rank || "" : "", rankDetail: q("#ge-rankd") ? q("#ge-rankd").value.trim() : "", role: q("#ge-role") ? q("#ge-role").value : "", roleRanks, main: q("#ge-main").value.trim(), tagline: q("#ge-tag").value.trim(), accent: q("#ge-accent").value, stats, sticker, tracking: q("#ge-live") ? q("#ge-live").checked : true, showRank: q("#ge-sr").checked, showStats: q("#ge-ss").checked, showSticker: q("#ge-sk").checked };
     };
     q("#ge-st").onclick = async () => { const im = await pickImage(256, 256); if (im) { sticker = im; q("#ge-st").textContent = "Change sticker"; } };
     if (q("#ge-stx")) q("#ge-stx").onclick = () => { sticker = ""; q("#ge-stx").remove(); };
@@ -900,7 +926,8 @@
     q("#ge-view").onclick = () => { const keep = (P("myBadges") || {}).games || {}; prefs.myBadges = { games: { ...keep, [key]: collect() } }; openCard("me", key); prefs.myBadges = { games: keep }; };
     q("#ge-save").onclick = async () => {
       const g = collect();
-      if (key === "overwatch" && g.handle && !/^[^#\s]{2,32}#\d{3,8}$/.test(g.handle)) { q("#ge-msg").className = "msg bad"; q("#ge-msg").textContent = "A BattleTag looks like Name#1234"; return; }
+      const bad = g.handle && isLive(game) && HANDLE_OK[key] && !HANDLE_OK[key][0].test(g.handle) ? HANDLE_OK[key][1] : "";
+      if (bad) { q("#ge-msg").className = "msg bad"; q("#ge-msg").textContent = bad; return; }
       await save({ myBadges: { games: { ...myPerson().games, [key]: g } }, badgesDirty: true });
       q("#ge-msg").className = "msg"; q("#ge-msg").textContent = "Saving...";
       showSave(await sendBadges());
@@ -1071,6 +1098,28 @@
     } catch {}
   }
   setTimeout(() => checkUpdate(), 4000); // (on its own, so nothing else at start-up can stop it)
+  // ---- sending BelleCord to a friend: the download link and a message to paste anywhere ----
+  const DOWNLOAD = "https://github.com/preferabelle/BelleCord/releases/latest/download/BelleCord.zip";
+  const SHARE_TEXT = "Try BelleCord! It puts Fluxer and Discord in one window, with themes, game badges and smooth animations. It's free:\n" + DOWNLOAD +
+    "\nUnzip it, install Node.js from nodejs.org if you don't have it, then open START (Windows).bat (on a Mac, START (Mac).command). It updates itself after that.";
+  const copyText = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { return false; } };
+  $("share-app").onclick = () => {
+    if ($("sharebox")) return;
+    const ov = document.createElement("div");
+    ov.id = "sharebox";
+    ov.innerHTML = '<div class="shbox" role="dialog" aria-label="Send BelleCord to a friend"><button class="shx" title="Close">✕</button><h2>Send BelleCord to a friend</h2><p>Copy this and send it to anyone who\'d like it. They get every update by themselves, same as you.</p>' +
+      '<label>The download</label><div class="shrow" style="margin-top:0"><input id="sh-link" readonly value="' + esc(DOWNLOAD) + '"><button id="sh-cl">Copy link</button></div>' +
+      '<label>A message you can send</label><textarea id="sh-text">' + esc(SHARE_TEXT) + '</textarea>' +
+      '<div class="shrow"><button class="primary" id="sh-cm">Copy message</button><button id="sh-gh">Open the page</button></div><div class="shmsg" id="sh-say"></div></div>';
+    document.body.appendChild(ov);
+    const close = () => ov.remove(), say = (t) => ($("sh-say").textContent = t);
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+    ov.querySelector(".shx").onclick = close;
+    $("sh-cl").onclick = async () => say((await copyText(DOWNLOAD)) ? "Link copied." : "Select the link and press Ctrl+C.");
+    $("sh-cm").onclick = async () => say((await copyText($("sh-text").value.trim() || SHARE_TEXT)) ? "Copied. Paste it in a DM or a server." : "Select the message and press Ctrl+C.");
+    $("sh-gh").onclick = () => host.openExternal("https://github.com/preferabelle/BelleCord");
+    addEventListener("keydown", function k(e) { if (e.key === "Escape") { close(); removeEventListener("keydown", k); } });
+  };
   $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
 
   // ---------------- start ----------------
