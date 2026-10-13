@@ -178,6 +178,10 @@
     return { size: /%/.test(L.size || "") ? L.size : "160% 160%", anim: "bcDrift 40s ease-in-out infinite alternate" };
   };
   const bgDecl = (L) => { const m = moveOf(L); return "background:" + L.css + ";" + (m ? "background-size:" + m.size + "!important;animation:" + m.anim + "!important;animation-play-state:running!important" : L.size ? "background-size:" + L.size : "") + (L.wall ? ";opacity:" + (Math.max(4, Math.min(80, Number(L.strength) || 30)) / 100).toFixed(2) + (L.blur ? ";filter:blur(" + L.blur + "px)" : "") : ""); };
+  // while a video plays (the page marks it: see VIDEO_PAGE in shell.js), the moving background holds still and the
+  // frosted glass goes plain, so the video gets the graphics chip to itself (with both busy, videos lagged and paused)
+  const VID = ":root[data-bc-video]:not(#bcv1):not(#bcv2):not(#bcv3) ";
+  const videoCalm = (moving, glass) => moving.map((x) => VID + x).join(",") + "{animation-play-state:paused!important;filter:none!important}" + (glass.length ? glass.map((x) => VID + x).join(",") + "{backdrop-filter:none!important}" : "");
   const KEYFRAMES = "@keyframes bcDrift{0%{background-position:0% 0%}100%{background-position:100% 100%}}" + Object.values(BACKGROUNDS).map((b) => { if (b.keyframes) return b.keyframes; const m = String(b.size || "").match(/^(\d+(?:\.\d+)?)px(?:\s+(\d+(?:\.\d+)?)px)?$/); if (!m) return ""; const w = +m[1], h = +(m[2] || m[1]); return "@keyframes bcDriftT" + w + "x" + h + "{from{background-position:0 0}to{background-position:" + w * 2 + "px " + h + "px}}"; }).join("");
 
   // ---------------- Fluxer ----------------
@@ -247,6 +251,7 @@
     if (fx.has("bubbles")) out.push(R + " [data-flx='channel.message-group.group']:not(:has([data-flx-system])){margin:3px 14px!important;padding-top:6px;padding-bottom:6px;border-radius:" + Math.max(10, r || 12) + "px;background:color-mix(in srgb," + t.raised + " 55%,transparent)}", R + " [data-flx='channel.message-group.group'] [class*='Message.module__messageGrouped']{padding-top:0!important;padding-bottom:0!important}");
     if (fx.has("shadows")) out.push(panels + "{box-shadow:0 0 28px rgba(0,0,0,.35)}");
     if (fx.has("scanlines")) out.push(grid + "::after{content:'';position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}", grid + "{position:relative!important}");
+    if (L) out.push(videoCalm(["body::before", "[data-flx='channel.channel-view.channel-view-scaffold.channel-grid']::before"], panels.split(",").map((x) => x.replace(R + " ", ""))));
     return out.join("\n");
   }
 
@@ -315,6 +320,7 @@
     }
     if (fx.has("shadows")) out.push(panels + "{box-shadow:0 0 28px rgba(0,0,0,.35)}");
     if (fx.has("scanlines")) out.push(C("chat") + "{position:relative}", C("chat") + "::after{content:'';position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}");
+    if (L) out.push(videoCalm([C("bg"), C("chat") + "::before"], [C("sidebarList"), C("panels"), C("membersWrap"), C("privateChannels")]));
     return out.join("\n");
   }
 

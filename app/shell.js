@@ -18,6 +18,7 @@
     skins: [{ id: "me", name: "Me", color: "" }], wearF: "me", wearD: "me", wStr: 30, wBlur: 2,
     countdowns: [], links: [], inbox: [], today: null, todaySeen: [], voiceSeen: {}, pinNoteSeen: false,
     me: {}, myName: "", pilotName: "", myBadges: {}, hubKey: "", badgesDirty: false, badgeCache: {},
+    motion: null, // (Off, Smooth or Ultra; until you pick, Smooth, or Off when your computer asks for less motion)
   };
   const P = (k) => (prefs[k] === undefined ? DEF[k] : prefs[k]);
   async function save(changes) { Object.assign(prefs, changes); try { prefs = Object.assign(await host.setPrefs(changes), prefs); } catch {} }
@@ -57,6 +58,8 @@
   const curSide = () => document.body.dataset.side || "fluxer";
   function setMode(m, quiet) {
     if (!MODES.includes(m)) m = "fluxer";
+    const was = document.body.dataset.mode;
+    if (window.bcMotion) window.bcMotion.beforeMode(was, m);
     document.body.dataset.mode = m;
     if (m === "fluxer" || m === "discord") {
       document.body.dataset.side = m;
@@ -66,6 +69,7 @@
     if (!quiet) save({ mode: m, side: curSide() });
     paintShell(); paintRailTop();
     if (m === "dash") paintDash(true);
+    if (window.bcMotion && was !== m) window.bcMotion.afterMode(m);
   }
   window.bcSetMode = setMode;
   // a click on a server (or the DM button) in the double list
@@ -698,37 +702,87 @@
     return 1;
   }.toString() + ")";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(BADGE_PAGE + "(" + JSON.stringify(s2) + ")").catch(() => {}); });
-  // my bridged bots on Fluxer (the mirrors that speak for my Discord friends) don't wear a BOT tag: they're people
-  const NOBOT_PAGE = "(" + function (ids) {
+  // no BOT / APP tags on the bridge: my bridged bots (the mirrors and twins that speak for my friends on the other
+  // side, my own bot, Asuka) are people, and every message posted through a webhook (how the bridge posts for
+  // everyone else) shows without a tag too. On both Fluxer and Discord.
+  const NOBOT_PAGE = "(" + function (side, ids) {
     window.__bcBridged = new Set(ids);
-    if (window.__bcNoBot) return 1;
+    if (window.__bcNoBot) { if (window.__bcNoBotRedo) window.__bcNoBotRedo(); return 1; }
     window.__bcNoBot = 1;
-    var css = document.createElement("style"); css.textContent = ".bc-nobot{display:none!important}";
+    var css = document.createElement("style");
+    // (an attribute, not a class: the site redraws its own classes, but leaves attributes it doesn't know alone)
+    css.textContent = "[data-bcnb=hide]{display:none!important}" + (side === "fluxer"
+      ? "[data-flx-author-webhook=true] [class*='ChannelUserTag.module__tag']:not([data-flx*='--op']),[data-flx-author-webhook=true] [data-flx$='user-tag-offset'],[data-flx-author-webhook=true] [data-flx$='user-tag-compact']{display:none!important}"
+      : "");
     (document.head || document.documentElement).appendChild(css);
-    var idOf = function (el) {
+    var TAGS = side === "fluxer"
+      ? '[data-flx="channel.user-tag.tag"],[data-flx$="user-tag-offset"],[data-flx$="user-tag-compact"],[class*="ChannelUserTag.module__tag"]'
+      : '[class^="botTag_"],[class*=" botTag_"]';
+    var avatarId = function (el) {
       for (var up = el, n = 0; up && n < 12; up = up.parentElement, n++) {
-        var a = up.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id");
+        if (side === "fluxer") { var a = up.getAttribute && up.getAttribute("data-flx-author-id"); if (a) return a; a = up.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id"); }
         var ims = up.querySelectorAll("img"); for (var i = 0; i < ims.length; i++) { var m = (ims[i].currentSrc || ims[i].src || "").match(/\/avatars\/(\d{5,25})\//); if (m) return m[1]; }
       }
       return null;
     };
+    // Discord: the message (or person) a tag belongs to, from the page's own data
+    var fiberKey = null;
+    var reactInfo = function (el) {
+      if (!fiberKey) { var ks = Object.keys(el); for (var i = 0; i < ks.length; i++) if (ks[i].indexOf("__reactFiber$") === 0) { fiberKey = ks[i]; break; } }
+      if (!fiberKey) return null;
+      for (var f = el[fiberKey], n = 0; f && n < 45; f = f.return, n++) {
+        var p = f.memoizedProps; if (!p || typeof p !== "object") continue;
+        var m = p.message && p.message.author ? p.message : p.referencedMessage && p.referencedMessage.message && p.referencedMessage.message.author ? p.referencedMessage.message : null;
+        if (m) return { webhook: !!m.webhookId, id: String(m.author.id) };
+        if (p.user && p.user.id && typeof p.user.id === "string") return { webhook: false, id: p.user.id };
+      }
+      return null;
+    };
+    var tries = new WeakMap();
     var scan = function () {
-      var tags = document.querySelectorAll('[data-flx="channel.user-tag.tag"],[class*="ChannelUserTag.module__tag"]');
+      var tags = document.querySelectorAll(TAGS);
       for (var i = 0; i < tags.length; i++) {
-        var t = tags[i]; if (t.getAttribute("data-bcnb")) continue;
-        var id = idOf(t); if (!id) continue;
-        t.setAttribute("data-bcnb", "1");
-        if (window.__bcBridged.has(id)) t.classList.add("bc-nobot");
+        var t = tags[i]; if (t.hasAttribute("data-bcnb")) continue;
+        if (/--op/.test(t.getAttribute("data-flx") || "") || /botTagOP/i.test(t.className) || (t.textContent || "").trim() === "OP") { t.setAttribute("data-bcnb", "keep"); continue; } // (OP is a forum tag, not a bot tag)
+        if (side === "fluxer") {
+          var art = t.closest("[data-flx-author-id]");
+          if (art && art.getAttribute("data-flx-author-webhook") === "true") { t.setAttribute("data-bcnb", "hide"); continue; }
+          var id = avatarId(t); if (!id) continue;
+          t.setAttribute("data-bcnb", window.__bcBridged.has(id) ? "hide" : "keep");
+        } else {
+          var info = reactInfo(t), aid = info ? info.id : avatarId(t);
+          if (!info && !aid) { var n = (tries.get(t) || 0) + 1; tries.set(t, n); if (n > 5) t.setAttribute("data-bcnb", "keep"); continue; }
+          t.setAttribute("data-bcnb", (info && info.webhook) || window.__bcBridged.has(String(aid)) ? "hide" : "keep");
+        }
       }
     };
-    setInterval(scan, 800); scan();
+    // (when the list changes, everything is looked at again)
+    window.__bcNoBotRedo = function () { var done = document.querySelectorAll("[data-bcnb]"); for (var i = 0; i < done.length; i++) done[i].removeAttribute("data-bcnb"); scan(); };
+    setInterval(scan, 700); scan();
     return 1;
   }.toString() + ")";
   let bridged = [];
-  const sendBridged = () => { try { $("wv-fluxer").executeJavaScript(NOBOT_PAGE + "(" + JSON.stringify(bridged) + ")").catch(() => {}); } catch {} };
-  const loadBridged = () => hub("GET", "/v1/bridged").then((r) => { if (r && r.ok && r.data && Array.isArray(r.data.ids)) { bridged = r.data.ids; sendBridged(); } });
-  $("wv-fluxer").addEventListener("dom-ready", sendBridged);
+  const sendBridged = (only) => { for (const s2 of only ? [only] : SIDES) { try { $("wv-" + s2).executeJavaScript(NOBOT_PAGE + "(" + JSON.stringify(s2) + "," + JSON.stringify(bridged) + ")").catch(() => {}); } catch {} } };
+  const loadBridged = () => hub("GET", "/v1/bridged").then((r) => { if (r && r.ok && r.data && Array.isArray(r.data.ids)) { const changed = JSON.stringify(r.data.ids) !== JSON.stringify(bridged); bridged = r.data.ids; if (changed) sendBridged(); } });
+  for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => sendBridged(s2));
   loadBridged(); setInterval(loadBridged, 10 * 60000);
+  // a video playing on either side: the page says so (data-bc-video on its root), and the theme's moving background
+  // and frosted glass hold still until it stops (see videoCalm in themes.js). A looping, silent GIF doesn't count.
+  const VIDEO_PAGE = "(" + function () {
+    if (window.__bcVideo) return 1;
+    window.__bcVideo = 1;
+    var real = function (m) { return !m.paused && !m.ended && !(m.muted && (m.loop || m.autoplay)); };
+    var check = function () {
+      var on = false, vs = document.getElementsByTagName("video");
+      for (var i = 0; i < vs.length && !on; i++) { try { on = real(vs[i]); } catch (e) {} }
+      var r = document.documentElement;
+      if (on !== r.hasAttribute("data-bc-video")) { if (on) r.setAttribute("data-bc-video", ""); else r.removeAttribute("data-bc-video"); }
+    };
+    ["play", "playing", "pause", "ended", "emptied", "volumechange"].forEach(function (ev) { document.addEventListener(ev, function () { setTimeout(check, 30); }, true); });
+    setInterval(check, 2500); check();
+    return 1;
+  }.toString() + ")()";
+  for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(VIDEO_PAGE).catch(() => {}); });
   // Fluxer: if you were at the bottom of a chat, you stay at the bottom when something changes size
   // (a new message, a picture loading, the search panel opening) instead of the last message ending up under the box
   const STICK = "(" + function () {
@@ -969,7 +1023,7 @@
     if (report && report.finding) { found.hidden = false; found.className = "fxfound" + (report.ok ? " fixed" : ""); found.innerHTML = "<b>" + (report.ok ? "What was wrong" : "What's wrong") + "</b>" + esc(report.finding); }
     // what's left for you
     const todos = (report && report.youDo) || [];
-    const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()], browser: ["Open Fluxer in my browser", () => host.fluxerHelp && host.fluxerHelp("browser")] };
+    const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()], browser: ["Open Fluxer in " + ((report && report.browser && report.browser.name) || "my browser"), () => host.fluxerHelp && host.fluxerHelp("browser")] };
     m.querySelector(".fxtodos").innerHTML = todos.length ? '<div class="fxtodo"><b>What you need to do</b>' + todos.map((t, i) => "<p>" + esc(t.text) + (t.action && ACT[t.action] ? '<br><button data-act="' + i + '">' + esc(ACT[t.action][0]) + "</button>" : "") + "</p>").join("") + "</div>" : "";
     m.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { const t = todos[Number(b.dataset.act)]; try { ACT[t.action][1](); } catch {} }));
     // the details (for a screenshot to me)
@@ -979,7 +1033,7 @@
     btn("Details", "ghost", () => m.querySelector(".fxtech").classList.toggle("on"));
     btn("Copy details", "ghost", async (e) => { try { await navigator.clipboard.writeText(m.querySelector(".fxtech").textContent); e.target.textContent = "Copied ✓"; } catch { m.querySelector(".fxtech").classList.add("on"); } });
     if (host.fluxerClean && !todos.some((t) => t.action === "clean")) btn("Open Fluxer in a clean window", "", () => host.fluxerClean());
-    if (report && !report.ok && host.fluxerHelp && !todos.some((t) => t.action === "browser")) btn("Open Fluxer in my browser", "", () => host.fluxerHelp("browser"));
+    if (report && !report.ok && host.fluxerHelp && !todos.some((t) => t.action === "browser")) btn("Open Fluxer in " + ((report.browser && report.browser.name) || "my browser"), "", () => host.fluxerHelp("browser"));
     if (host.fluxerReset) {
       const r = btn("Sign out & start fresh", "", async () => {
         if (!r.dataset.sure) { r.dataset.sure = "1"; r.textContent = "Really? This signs you out of Fluxer here - click again"; r.classList.add("danger"); setTimeout(() => { if (r.isConnected) { delete r.dataset.sure; r.textContent = "Sign out & start fresh"; r.classList.remove("danger"); } }, 5000); return; }
@@ -1027,6 +1081,10 @@
     if (prefs.fxColors && typeof prefs.fxColors === "object" && prefs.fxColors.chat) fxColors = prefs.fxColors;
     document.body.dataset.side = P("side") === "discord" ? "discord" : "fluxer";
     document.body.dataset.rail = P("rail") === "one" ? "one" : "cols";
+    const motionNow = () => P("motion") || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches ? "off" : "smooth");
+    if (window.bcMotion) window.bcMotion.set(motionNow());
+    $("opt-motion").value = motionNow();
+    $("opt-motion").onchange = (e) => { save({ motion: e.target.value }); if (window.bcMotion) window.bcMotion.set(e.target.value); toast(e.target.value === "ultra" ? "Ultra animations: on. Have fun." : e.target.value === "off" ? "Animations: off." : "Animations: smooth."); };
     document.documentElement.style.setProperty("--split", P("split") + "%");
     $("keep-colors").checked = !!P("keepColors"); $("w-str").value = P("wStr"); $("w-blur").value = P("wBlur");
     for (const s of P("todaySeen") || []) seenMsg.add(s);

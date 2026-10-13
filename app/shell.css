@@ -217,7 +217,7 @@ h3.sub .keep{margin-left:10px}
 #toast.on{opacity:1}
 .emojipop{position:fixed;z-index:40;background:var(--side);border:1px solid var(--line);border-radius:var(--r);padding:8px;display:grid;grid-template-columns:repeat(8,32px);gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .emojipop button{background:transparent;padding:0;width:32px;height:32px;font-size:18px}.emojipop button:hover{background:var(--hover)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* (motion: see "motion" at the end. Off is a setting now, and the default when the computer asks for less motion) */
 
 /* the intro (the same one as in my own BelleCord) */
 #bcsplash{position:fixed;inset:0;z-index:99999;background:#0d0405;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;animation:bcsOut .5s ease 2.5s forwards;font-family:"Segoe UI",system-ui,sans-serif}
@@ -358,3 +358,79 @@ body[data-flip] #rail .cols{flex-direction:row-reverse}
 body[data-flip][data-rail=one] #rail .cols{flex-direction:column-reverse}
 body[data-flip][data-mode=both] #discord{left:0;right:auto;width:var(--split)}
 body[data-flip][data-mode=both] #fluxer{left:var(--split);right:0;width:auto}
+
+/* ---------------- motion ----------------
+   Three settings (App > Animations): Off, Smooth (the default) and Ultra. Everything that moves only moves things the
+   graphics chip can move on its own (position, size, see-through), never anything that makes the page re-lay itself
+   out, so it stays smooth and cheap. Ultra is slower, springier and fancier (see motion.js). */
+body{--ease:cubic-bezier(.22,1,.36,1);--spring:cubic-bezier(.34,1.56,.64,1);--t1:120ms;--t2:200ms;--t3:320ms;--lift:2px;--stagger:28ms;--slide:14px}
+body[data-motion=ultra]{--ease:cubic-bezier(.16,1,.3,1);--spring:cubic-bezier(.3,1.9,.45,1);--t1:170ms;--t2:300ms;--t3:540ms;--lift:4px;--stagger:55ms;--slide:30px}
+body[data-motion=off] *,body[data-motion=off] *::before,body[data-motion=off] *::after{transition:none!important;animation:none!important}
+
+/* switching sides: the new side slides in as the old one slides out (the dashboard rises from below) */
+.pane{opacity:0;transform:translate3d(var(--px,0px),var(--py,0px),0) scale(var(--ps,1));transition:opacity var(--t2) var(--ease),transform var(--t3) var(--ease),visibility 0s linear var(--t3)}
+body[data-mode=dash] #dash,body[data-mode=fluxer] #fluxer,body[data-mode=discord] #discord,body[data-mode=both] .site{opacity:1;transform:none;transition:opacity var(--t2) var(--ease),transform var(--t3) var(--ease),visibility 0s}
+body.dragging .pane{transition:none}
+
+/* buttons: a soft press, and colors that ease instead of snapping */
+button{transition:filter var(--t1) var(--ease),transform var(--t1) var(--ease),background-color var(--t1) var(--ease),color var(--t1) var(--ease),box-shadow var(--t2) var(--ease),border-color var(--t2) var(--ease)}
+button:active:not(:disabled){transform:scale(.97);transition-duration:60ms}
+#tabs button{transition:background-color var(--t2) var(--ease),color var(--t2) var(--ease),box-shadow var(--t2) var(--ease)}
+
+/* the double server list: icons round into squircles, lift a little, and press in; the unread pill and pings pop */
+.ri{transition:border-radius var(--t2) var(--spring),transform var(--t1) var(--ease),background-color var(--t2) var(--ease),box-shadow var(--t2) var(--ease)}
+.ri:hover{transform:translateY(-1px)}
+.ri:active{transform:scale(.92);transition-duration:70ms}
+.ri .pic img{transition:transform var(--t3) var(--ease)}
+.ri .pill{transition:height var(--t2) var(--spring),margin var(--t2) var(--spring)}
+.ri:not(.dash):hover .pill{height:20px;margin-top:-10px}
+.ri.unread:hover .pill{height:20px;margin-top:-10px}
+.ri .ping.on,.badge.on{animation:bcPop var(--t3) var(--spring) both}
+.fgroup{animation:bcFold var(--t3) var(--ease) both;transform-origin:top center}
+@keyframes bcPop{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
+@keyframes bcFold{from{opacity:0;transform:scaleY(.6) translateY(-6px)}to{opacity:1;transform:none}}
+
+/* the dashboard: its sections float up one after another; cards lift under the mouse */
+#dash.play .hero .herotext,#dash.play .hero .heropic{animation:bcRise var(--t3) var(--ease) both}
+#dash.play .hero .herotext{animation-delay:var(--stagger)}
+#dash.play .wrap>.sec{animation:bcRise var(--t3) var(--ease) both;animation-delay:calc((var(--i,0) + 2) * var(--stagger))}
+@keyframes bcRise{from{opacity:0;transform:translate3d(0,calc(var(--slide) * .7),0)}to{opacity:1;transform:none}}
+.card,.vcard,.skin,.tpl,.gbgames button,.cdrow{transition:transform var(--t2) var(--ease),box-shadow var(--t2) var(--ease),border-color var(--t2) var(--ease),background-color var(--t2) var(--ease)}
+.vcard:hover,.skin:hover,.tpl:hover,.gbgames button:hover{transform:translate3d(0,calc(var(--lift) * -1),0);box-shadow:0 10px 26px rgba(0,0,0,.28)}
+.popt{transition:transform var(--t1) var(--ease),border-color var(--t2) var(--ease),background-color var(--t2) var(--ease),box-shadow var(--t2) var(--ease)}
+.popt:hover{transform:translateY(-1px)}
+.popt.bc-pick,.tpl.bc-pick{animation:bcPick var(--t3) var(--spring)}
+@keyframes bcPick{0%{transform:scale(.94)}100%{transform:none}}
+.gb{transition:transform var(--t2) var(--spring),filter var(--t1) var(--ease)}
+.gb:hover{transform:translateY(-2px) scale(1.08)}
+.heropic::after{transition:opacity var(--t2) var(--ease)}
+
+/* windows and menus: they pop open instead of just appearing */
+#fxmodal,#gcard:not([hidden]),#namebox{animation:bcFade var(--t2) var(--ease) both}
+#fxmodal .fxbox,#gcard:not([hidden]) .gcbox,#namebox form{animation:bcOpen var(--t3) var(--spring) both}
+#addmenu:not([hidden]),.emojipop{animation:bcMenu var(--t2) var(--spring) both;transform-origin:bottom left}
+#sidepanel:not([hidden]){animation:bcPanel var(--t3) var(--ease) both}
+#fxmodal li{animation:bcRise var(--t2) var(--ease) both}
+@keyframes bcFade{from{opacity:0}to{opacity:1}}
+@keyframes bcOpen{from{opacity:0;transform:translate3d(0,12px,0) scale(.95)}to{opacity:1;transform:none}}
+@keyframes bcMenu{from{opacity:0;transform:scale(.92) translateY(6px)}to{opacity:1;transform:none}}
+@keyframes bcPanel{from{opacity:.4;transform:translate3d(40px,0,0)}to{opacity:1;transform:none}}
+
+/* the little message at the bottom: it rises and settles */
+#toast{transform:translate3d(-50%,14px,0) scale(.97);transition:opacity var(--t2) var(--ease),transform var(--t3) var(--spring)}
+#toast.on{transform:translate3d(-50%,0,0)}
+
+/* Ultra: the extras (motion.js draws the triangles, tilts the cards and adds the click ripples) */
+body[data-motion=ultra] .ri:hover{transform:translateY(-2px);box-shadow:0 8px 20px color-mix(in srgb,var(--ring,var(--accent)) 35%,transparent)}
+body[data-motion=ultra] .ri:hover .pic img{transform:scale(1.08)}
+body[data-motion=ultra] .ri.sel{animation:bcGlow 2.6s ease-in-out 1}
+@keyframes bcGlow{0%,100%{filter:none}40%{filter:brightness(1.18) drop-shadow(0 0 8px color-mix(in srgb,var(--ring,var(--accent)) 70%,transparent))}}
+body[data-motion=ultra] .tilt{transform:perspective(800px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translate3d(0,calc(var(--lift) * -1),0)!important;transition:transform 90ms linear,box-shadow var(--t2) var(--ease)!important;box-shadow:0 14px 34px rgba(0,0,0,.32)}
+body[data-motion=ultra] #tabs [data-mode]{position:relative}
+body[data-side=fluxer][data-motion=ultra] #tabs [data-mode=fluxer],body[data-side=discord][data-motion=ultra] #tabs [data-mode=discord]{box-shadow:0 0 14px color-mix(in srgb,var(--accent) 45%,transparent)}
+.hero .tri{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.9}
+.hero{--hx:0px;--hy:0px}
+body[data-motion=ultra] .hero .heropic{transform:translate3d(calc(var(--hx) * .6),calc(var(--hy) * .6),0)}
+body[data-motion=ultra] .hero .herotext{transform:translate3d(calc(var(--hx) * .3),calc(var(--hy) * .3),0)}
+.rip{position:absolute;border-radius:50%;pointer-events:none;background:color-mix(in srgb,var(--strong) 35%,transparent);transform:translate(-50%,-50%) scale(0);animation:bcRip 520ms var(--ease) forwards}
+@keyframes bcRip{to{transform:translate(-50%,-50%) scale(1);opacity:0}}

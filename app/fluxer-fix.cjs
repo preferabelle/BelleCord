@@ -100,6 +100,9 @@ module.exports = function createFluxerFix(o) {
   const fses = () => session.fromPartition(partition);
   const home = () => (isHome(S().home) ? String(S().home).replace(/\/+$/, "") : HOMES[0]);
   let busy = null;
+  // your normal browser (the one links open in), by name: on most Windows computers, Microsoft Edge
+  const browserName = () => { try { return String(app.getApplicationNameForProtocol("https://fluxer.com/") || "").replace(/\.exe$/i, "").trim(); } catch { return ""; } };
+  const inBrowser = () => { const n = browserName(); return n ? "in " + n + " (your normal browser)" : "in your normal browser"; };
 
   // ---------------- the parts ----------------
   function applyResolver(secure) {
@@ -278,6 +281,8 @@ module.exports = function createFluxerFix(o) {
     const date = net.date || net2.date;
     if (date) { const t = Date.parse(date); if (!isNaN(t)) out.clockMin = Math.round((Date.now() - t) / 60000); }
     try { out.proxy = String(await withTimeout(ses.resolveProxy("https://web.fluxer.app/"), 4000, "proxy")).trim() || "DIRECT"; } catch { out.proxy = "?"; }
+    // is the graphics chip doing the video work? (when it isn't, videos lag)
+    try { const g = app.getGPUFeatureStatus(); out.gpu = { video: String(g.video_decode || "?"), compositing: String(g.gpu_compositing || "?") }; } catch { out.gpu = null; }
     out.discovery = await discovery(ses);
     const e = (out.discovery && out.discovery.endpoints) || {};
     // every part of Fluxer the page talks to, as Fluxer itself lists them (plus fluxer.com, where Fluxer is moving)
@@ -394,6 +399,12 @@ module.exports = function createFluxerFix(o) {
         finding = finding || "Your computer's clock is wrong, so secure sites refuse to connect.";
       }
 
+      // videos: decoded by the graphics chip, or by the processor alone (slow: videos lag and pause)
+      if (before.gpu && before.gpu.video !== "?" && !/^enabled/.test(before.gpu.video)) {
+        step("video", "Videos are played without your graphics chip, so they can lag", "warn", "Video decoding: " + before.gpu.video + " · compositing: " + before.gpu.compositing);
+        youDo.push({ text: "Update your graphics driver (NVIDIA, AMD or Intel, from their website or Windows Update), then restart your computer. Videos in BelleCord use the graphics chip once the driver is up to date." });
+      }
+
       // which address to use (Fluxer is moving from web.fluxer.app to fluxer.com)
       step("where", "Finding which Fluxer address answers", "run");
       try { await ses.clearHostResolverCache(); } catch {}
@@ -467,7 +478,7 @@ module.exports = function createFluxerFix(o) {
             step("files", "This computer can't download Fluxer's app files from " + fh, "fail", short(first.url) + ": " + (first.code || "HTTP " + first.status) + (t.code || t.status ? " · plain connection: " + (t.code || "HTTP " + t.status) : ""));
             finding = finding || "This computer can't download Fluxer's app files from " + fh + " (" + (first.code || "HTTP " + first.status) + "), so Fluxer's page stays empty.";
             if (tests.some((x) => /CERT|SELF_SIGNED|ISSUER/.test(x.code || ""))) youDo.push({ text: "Something on this computer checks secure connections in the middle (antivirus \"HTTPS scanning\" / \"web shield\"). Let it skip fluxer.app, fluxer.com and fluxerstatic.com, or turn that part off, then press Fix Fluxer again." });
-            youDo.push({ text: "Something between this computer and " + fh + " stops Fluxer's app files: antivirus \"web protection\", a firewall, a VPN, or your internet provider. Check whether Fluxer opens in your normal browser. If it doesn't open there either, try your phone's hotspot: if it works there, your Wi-Fi or provider is the problem.", action: "browser" });
+            youDo.push({ text: "Something between this computer and " + fh + " stops Fluxer's app files: antivirus \"web protection\", a firewall, a VPN, or your internet provider. Check whether Fluxer opens " + inBrowser() + ". If it doesn't open there either, try your phone's hotspot: if it works there, your Wi-Fi or provider is the problem.", action: "browser" });
           }
         }
       }
@@ -514,7 +525,7 @@ module.exports = function createFluxerFix(o) {
           else if (page.crashed) finding = finding || "Fluxer's page crashed (" + page.crashed + ").";
           else if (page.errors.length) finding = finding || "Fluxer's page starts but its code stops with an error: " + page.errors[0];
           else finding = finding || "Fluxer's page loads but never starts, and nothing failed to download.";
-          youDo.push({ text: "Try \"Open Fluxer in a clean window\". If Fluxer works there, BelleCord's look is what's breaking it" + (helpLine ? " - " + helpLine : "") + ". If it doesn't, check whether Fluxer opens in your normal browser, then try \"Sign out & start fresh\".", action: "clean" });
+          youDo.push({ text: "Try \"Open Fluxer in a clean window\". If Fluxer works there, BelleCord's look is what's breaking it" + (helpLine ? " - " + helpLine : "") + ". If it doesn't, check whether Fluxer opens " + inBrowser() + ", then try \"Sign out & start fresh\".", action: "clean" });
         }
       } else step("reload", "Open the Fluxer side to finish", "skip");
 
@@ -522,7 +533,7 @@ module.exports = function createFluxerFix(o) {
       const filesOk = !files || files.list.every((g) => g.ok) || restartNeeded;
       const ok = restartNeeded ? reachable : reachable && filesOk && (!page || page.kind === "ok" || page.kind === "migrating" || page.kind === "unknown");
       if (!ok && !finding && !reachable) finding = "Fluxer doesn't answer from this computer.";
-      const report = { ok, restartNeeded, finding, steps, youDo, home: where, page, files, tech: techText(before, { web: oldA, com: newA }, files, page, s) };
+      const report = { ok, restartNeeded, finding, steps, youDo, home: where, page, files, browser: { name: browserName(), engine: "Chromium " + (process.versions.chrome || "?"), electron: process.versions.electron || "" }, tech: techText(before, { web: oldA, com: newA }, files, page, s) };
       save({ ...s, lastFix: { at: before.at, ok, page: page && page.kind, finding } });
       return report;
     })();
@@ -531,6 +542,8 @@ module.exports = function createFluxerFix(o) {
   function techText(b, after, files, page, s) {
     const L = ["BelleCord · Fix Fluxer · " + new Date(b.at).toLocaleString(), "Internet: " + (b.internet.ok ? "ok" : "DOWN " + b.internet.code) + " · clock " + (b.clockMin == null ? "?" : b.clockMin === 0 ? "in sync" : b.clockMin + " min off") + " · proxy " + b.proxy + " · VPN " + (b.vpn.join(", ") || "none")];
     L.push("Hosts file: " + (b.hostsFile.lines.length ? b.hostsFile.lines.map((l) => "#" + l.n + " " + l.text).join(" | ") : "no Fluxer lines"));
+    L.push("Graphics: " + (b.gpu ? "video " + b.gpu.video + " · compositing " + b.gpu.compositing : "?"));
+    L.push("BelleCord runs on Chromium " + (process.versions.chrome || "?") + " (Electron " + (process.versions.electron || "?") + ") · your browser: " + (browserName() || "?"));
     L.push("Discovery: " + (b.discovery && b.discovery.ok ? "ok (webapp " + ((b.discovery.endpoints || {}).webapp || "?") + ")" : "no answer"));
     for (const [h, r] of Object.entries(b.hosts)) L.push(h + "  dns " + (r.dns.ips.length ? r.dns.ips.slice(0, 2).join(" ") + (r.dns.blocked ? " (BLOCKED)" : "") : r.dns.code) + (r.differs ? "  (secure DNS says " + r.doh.slice(0, 2).join(" ") + ")" : "") + "  https " + (r.http.status || r.http.code) + " " + r.http.ms + "ms");
     L.push("After: web.fluxer.app " + (after.web.status || after.web.code) + " · fluxer.com " + (after.com.status || after.com.code));
