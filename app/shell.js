@@ -989,6 +989,8 @@
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
   const flip = () => { if (P("flip")) document.body.setAttribute("data-flip", ""); else document.body.removeAttribute("data-flip"); };
   $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
+  // the swap button under the server list: the same as "Discord first" in the App section
+  document.querySelectorAll(".layoutsw [data-swap]").forEach((b) => (b.onclick = () => { const on = !P("flip"); save({ flip: on }); $("opt-flip").checked = on; flip(); }));
   async function checkUpdate(loud) {
     if (!host.checkUpdate) return;
     if (loud) $("upd-msg").textContent = "Checking...";

@@ -87,6 +87,7 @@ body[data-mode=dash] .ri.dash .ring{animation-duration:2.5s}
 .layoutsw{display:flex;gap:2px;background:color-mix(in srgb,var(--bg) 60%,#000);border-radius:6px;padding:2px}
 .layoutsw button{background:transparent;color:var(--dim);padding:4px 9px;display:flex;align-items:center}
 body[data-rail=cols] .layoutsw [data-rail=cols],body[data-rail=one] .layoutsw [data-rail=one]{background:var(--raised);color:var(--strong)}
+.layoutsw [data-swap]:hover{color:var(--strong)}body[data-rail=one] .layoutsw button{padding:4px 4px}
 #addmenu{position:fixed;left:calc(var(--railw) - 8px);bottom:56px;background:var(--side);border:1px solid var(--line);border-radius:var(--r);padding:6px;display:flex;flex-direction:column;gap:4px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 #addmenu[hidden]{display:none}#addmenu button{text-align:left;background:transparent}#addmenu button:hover{background:var(--hover)}
 

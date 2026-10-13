@@ -25,8 +25,8 @@ Rules:
   and which zip of it is installed. The app checks the latest GitHub release of this repo. When the release tag
   (`vT`) is higher than "version", or it's the same release with a newer zip, it shows an Update button.
 - I renumbered the updates once, so tags and titles don't match: tag `v12` is "BelleCord Update 8". Tags only
-  count up (old copies of the app need that); the number in the title is the one people see. The next update is
-  tag `v13`, "BelleCord Update 9".
+  count up (old copies of the app need that); the number in the title is the one people see. Update 9 is tag `v13`; the next one is
+  tag `v14`, "BelleCord Update 10".
 - A new number is only for real new things. A fix for something in the latest update goes into that same update:
   same tag, its notes rewritten to describe the whole update as it is now (not "fixed X"), and Post replaces it.
   Everyone who already has it still gets the fix.
