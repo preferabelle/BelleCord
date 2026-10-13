@@ -21,6 +21,8 @@ WHAT'S IN IT
 - T, P and X in the title bar: TikTok, Pinterest and X.
 - Closing the window keeps it running in the tray (you can turn that off on the dashboard).
 - Animations: Off, Smooth or Ultra, in the App section of the dashboard.
+- Watching a stream and switching sides? It keeps playing in a small window in the corner. Drag it,
+  resize it from its top-left corner, or double-click it to go back.
 - Want to share it? "Send BelleCord to a friend" in the App section gives you a link and a message to send.
 
 THE DASHBOARD

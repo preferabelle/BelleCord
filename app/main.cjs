@@ -306,7 +306,13 @@ const keepInTray = () => readPrefs().tray !== false;
 
 // ---- updates: a new version on GitHub shows an Update button; one click puts it in and restarts ----
 const UPDATE_FILE = path.join(__dirname, "update.json");
-const updateInfo = () => { try { const u = JSON.parse(fs.readFileSync(UPDATE_FILE, "utf-8")); return { repo: String(u.repo || "").trim(), version: Number(u.version) || 0 }; } catch { return { repo: "", version: 0 }; } };
+// (when I fix something in an update that's already out, I put the fix into that same update instead of making a
+// new one: its zip changes, so "asset" (which zip you have) tells the app there's something new to get)
+// ("version" is GitHub's counter, from the release tag, and only goes up; "name" is the update number people see,
+// from the release title, "BelleCord Update 8". I renumbered the updates once, so the two don't match.)
+const updateInfo = () => { try { const u = JSON.parse(fs.readFileSync(UPDATE_FILE, "utf-8")); return { repo: String(u.repo || "").trim(), version: Number(u.version) || 0, asset: Number(u.asset) || 0, name: Number(u.name) || 0 }; } catch { return { repo: "", version: 0, asset: 0, name: 0 }; } };
+const saveUpdateInfo = (u) => { try { fs.writeFileSync(UPDATE_FILE, JSON.stringify({ repo: u.repo, version: u.version, ...(u.name ? { name: u.name } : {}), ...(u.asset ? { asset: u.asset } : {}) }, null, 2)); } catch {} };
+const titleNumber = (t) => { const m = String(t || "").match(/Update (\d+)/i); return m ? Number(m[1]) : 0; };
 const tagNumber = (t) => { const m = String(t || "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 0; };
 let found = null;
 async function getJson(url) { const r = await net.fetch(url, { headers: { "user-agent": "BelleCord", accept: "application/vnd.github+json" } }); if (!r.ok) throw new Error("GitHub said " + r.status); return r.json(); }
@@ -317,8 +323,12 @@ ipcMain.handle("update:check", async () => {
     const rel = await getJson("https://api.github.com/repos/" + u.repo + "/releases/latest");
     const asset = (rel.assets || []).find((a) => /\.zip$/i.test(a.name));
     const v = tagNumber(rel.tag_name);
-    found = asset && v > u.version ? { url: asset.browser_download_url, version: v } : null;
-    return { available: !!found, version: u.version, latest: v, notes: String(rel.body || "").slice(0, 600) };
+    // (same update, and I don't know yet which zip you have: the one you have counts as this one)
+    if (asset && v === u.version && !u.asset) saveUpdateInfo({ ...u, asset: asset.id });
+    const fixed = !!asset && v === u.version && !!u.asset && asset.id !== u.asset;
+    const shown = titleNumber(rel.name) || v;
+    found = asset && (v > u.version || fixed) ? { url: asset.browser_download_url, version: v, asset: asset.id, name: shown } : null;
+    return { available: !!found, fixes: !!found && v === u.version, version: u.name || u.version, latest: shown, notes: String(rel.body || "").slice(0, 600) };
   } catch (e) { return { available: false, version: u.version, error: String(e.message || e) }; }
 });
 // the smallest zip reader that does the job (zip files: a list at the end says where each file is)
@@ -351,7 +361,7 @@ ipcMain.handle("update:apply", async () => {
       if (!rel || rel.includes("..") || (keep.has(rel) && fs.existsSync(path.join(root, rel)))) continue;
       const to = path.join(root, rel); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.writeFileSync(to, f.data); if (/^START /.test(rel)) { try { fs.chmodSync(to, 0o755); } catch {} } n++;
     }
-    const u = updateInfo(); fs.writeFileSync(UPDATE_FILE, JSON.stringify({ repo: u.repo, version: Math.max(found.version, updateInfo().version) }, null, 2));
+    const u = updateInfo(); saveUpdateInfo({ repo: u.repo, version: Math.max(found.version, u.version), asset: found.asset, name: found.name || u.name });
     flushAll();
     setTimeout(() => { app.relaunch(); quitting = true; app.exit(0); }, 400);
     return { ok: true, files: n };

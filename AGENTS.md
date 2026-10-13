@@ -21,8 +21,15 @@ Rules:
 
 ## How updates reach people
 
-- `app/update.json` holds the installed version number. The app checks the latest GitHub release of this repo.
-  When the release tag (`vN`) is higher than that number, it shows an Update button.
+- `app/update.json` holds the installed release's tag number ("version"), the update number people see ("name")
+  and which zip of it is installed. The app checks the latest GitHub release of this repo. When the release tag
+  (`vT`) is higher than "version", or it's the same release with a newer zip, it shows an Update button.
+- I renumbered the updates once, so tags and titles don't match: tag `v12` is "BelleCord Update 8". Tags only
+  count up (old copies of the app need that); the number in the title is the one people see. The next update is
+  tag `v13`, "BelleCord Update 9".
+- A new number is only for real new things. A fix for something in the latest update goes into that same update:
+  same tag, its notes rewritten to describe the whole update as it is now (not "fixed X"), and Post replaces it.
+  Everyone who already has it still gets the fix.
 - Update downloads the release's zip and replaces `app/*`, `package.json` and the `START` files. A person's own
   `app/hub.json` is kept. Then the app restarts.
 - I make releases from my own copy of BelleCord with its "Post vN" button. That button commits the zip's files here

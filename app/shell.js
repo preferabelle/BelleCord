@@ -996,7 +996,7 @@
     if (!r || (r.error && !loud)) { if ((checkUpdate.tries = (checkUpdate.tries || 0) + 1) <= 5) setTimeout(checkUpdate, 60000); if (!r) return; } else checkUpdate.tries = 0; // (no internet yet when the app opened: try again in a minute)
     $("app-ver").textContent = (r.version ? "BelleCord Update " + r.version + " · " : "BelleCord · ") + "made by Belle";
     $("updbtn").hidden = !r.available;
-    if (loud) $("upd-msg").textContent = r.available ? "Update " + r.latest + " is ready" : r.error ? "Couldn't check" : "Up to date";
+    if (loud) $("upd-msg").textContent = r.available ? (r.fixes ? "Fixes for Update " + r.latest + " are ready" : "Update " + r.latest + " is ready") : r.error ? "Couldn't check" : "Up to date";
   }
   const doUpdate = async () => { $("updbtn").textContent = "Updating..."; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
