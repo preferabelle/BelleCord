@@ -23,5 +23,6 @@ contextBridge.exposeInMainWorld("bcApp", {
   onFluxerProgress: (fn) => ipcRenderer.on("fluxer-progress", (e, step) => { try { fn(step); } catch (x) {} }),
   setTitleBar: (color, symbol) => ipcRenderer.invoke("titlebar", { color, symbol }),
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),
+  onNav: (fn) => ipcRenderer.on("nav", (e, way) => fn(String(way))),
   onNotice: (fn) => ipcRenderer.on("notice", (e, what) => fn(String(what))),
 });

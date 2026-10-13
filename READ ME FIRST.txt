@@ -18,6 +18,8 @@ WHAT'S IN IT
 - Fluxer servers on the left, Discord servers on the right.
 - Top left: the dashboard (right-click to change its picture). Top right: your DMs.
 - Ctrl+1 Fluxer, Ctrl+2 Discord, Ctrl+3 both, Ctrl+4 dashboard (Cmd on Mac).
+- Back and forward like a browser: the arrows at the top, your mouse's side buttons, or Alt+Left / Alt+Right
+  (Cmd+[ / Cmd+] on Mac).
 - T, P and X in the title bar: TikTok, Pinterest and X.
 - Closing the window keeps it running in the tray (you can turn that off on the dashboard).
 - Animations: Off, Smooth or Ultra, in the App section of the dashboard.
