@@ -74,6 +74,15 @@
     if ((back || fwd) && !(e.target && e.target.matches && e.target.matches("input,textarea,[contenteditable]"))) { e.preventDefault(); nav(back ? "back" : "forward"); }
   });
   if (window.bcApp && window.bcApp.onNav) window.bcApp.onNav(nav);
+  // inside Fluxer and Discord the mouse's side buttons go to their page, not to BelleCord, so each page gets a tiny
+  // listener that passes those two buttons on (nothing else)
+  const SIDE_BUTTONS = "(function(){if(window.__bcNavBtn)return 1;window.__bcNavBtn=1;var stop=function(e){if(e.button===3||e.button===4){e.preventDefault();e.stopPropagation();}};addEventListener('mousedown',stop,true);addEventListener('auxclick',stop,true);addEventListener('mouseup',function(e){if(e.button===3||e.button===4){stop(e);console.log('__bcnav:'+(e.button===3?'back':'forward'));}},true);return 1})()";
+  for (const s of SIDES) {
+    const v = $("wv-" + s); if (!v) continue;
+    const hook = () => { try { v.executeJavaScript(SIDE_BUTTONS).catch(() => {}); } catch {} };
+    v.addEventListener("dom-ready", hook); setTimeout(hook, 2500);
+    v.addEventListener("console-message", (e) => { const m = /^__bcnav:(back|forward)$/.exec(String(e.message || "")); if (m) nav(m[1]); });
+  }
 
   // the arrows in the top bar
   const css = document.createElement("style");
