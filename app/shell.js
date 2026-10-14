@@ -58,6 +58,8 @@
   const curSide = () => document.body.dataset.side || "fluxer";
   function setMode(m, quiet) {
     if (!MODES.includes(m)) m = "fluxer";
+    const only = P("only"); // (using just one side: the other one, and "both", aren't places to go)
+    if ((only === "fluxer" || only === "discord") && m !== "dash" && m !== only) m = only;
     const was = document.body.dataset.mode;
     if (window.bcMotion) window.bcMotion.beforeMode(was, m);
     document.body.dataset.mode = m;
@@ -72,6 +74,10 @@
     if (window.bcMotion && was !== m) window.bcMotion.afterMode(m);
   }
   window.bcSetMode = setMode;
+  window.bcPref = (k) => P(k); // (for only.js)
+  window.bcSavePref = (c) => save(c);
+  window.bcToast = (t, ms) => toast(t, ms);
+  window.bcPickSide = (x) => pickSide(x);
   // a click on a server (or the DM button) in the double list
   window.bcOnServer = (side, kind) => {
     if (kind === "f") return; // (a folder just opens or closes in the list)
@@ -79,7 +85,7 @@
     if (document.body.dataset.mode !== "both") { const was = dmMode; dmMode = false; setMode(side); dmMode = was; }
   };
   // on the dashboard, the Fluxer / Discord tabs pick the side but you stay on the dashboard
-  function pickSide(s) { document.body.dataset.side = s; save({ side: s }); paintShell(); paintRailTop(); paintDash(true); }
+  function pickSide(s) { const only = P("only"); if (only === "fluxer" || only === "discord") s = only; document.body.dataset.side = s; save({ side: s }); paintShell(); paintRailTop(); paintDash(true); }
   const tab = (s) => (document.body.dataset.mode === "dash" ? pickSide(s) : setMode(s));
   document.querySelectorAll("#tabs [data-mode]").forEach((b) => (b.onclick = () => tab(b.dataset.mode)));
   $("bothbtn").onclick = () => setMode(document.body.dataset.mode === "both" ? curSide() : "both");
@@ -989,6 +995,8 @@
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
   const flip = () => { if (P("flip")) document.body.setAttribute("data-flip", ""); else document.body.removeAttribute("data-flip"); };
   $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
+  // the swap button under the server list: the same as "Discord first" in the App section
+  document.querySelectorAll(".layoutsw [data-swap]").forEach((b) => (b.onclick = () => { const on = !P("flip"); save({ flip: on }); $("opt-flip").checked = on; flip(); }));
   async function checkUpdate(loud) {
     if (!host.checkUpdate) return;
     if (loud) $("upd-msg").textContent = "Checking...";
