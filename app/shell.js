@@ -284,6 +284,7 @@
       const me = { ...P("me"), [side]: st.me }; const ch = { me }; if (st.me.name && (side === "fluxer" || !P("myName"))) ch.myName = st.me.name; save(ch);
       if (P("badgesDirty")) sendBadges(true);
     }
+    if (st.me && st.me.id) sayHello();
     const vs = { ...P("voiceSeen") };
     for (const v of st.voice || []) { const k = side + ":" + v.guild + ":" + (v.cid || v.name); vs[k] = { ...v, side, at: now }; voiceChanged = true; }
     if (inboxChanged) { prefs.inbox = inbox.slice(0, 80); saveSoon("inbox"); }
@@ -617,6 +618,21 @@
   // ---------------- game badges ----------------
   const G = window.bcGames;
   const hub = (method, route, payload) => (host.hub ? host.hub(method, route, payload).catch(() => ({ ok: false, error: "offline" })) : Promise.resolve({ ok: false, error: "offline" }));
+  // "I use BelleCord": my accounts go to the hub now and then, so I get the BelleCord Users role in the servers
+  // (and so do the bots that stand in for me on the other side)
+  let helloSent = "", helloAt = 0;
+  function sayHello() {
+    try {
+      const me = P("me") || {}, ids = {};
+      for (const s2 of ["fluxer", "discord"]) if (me[s2] && me[s2].id) ids[s2] = me[s2].id;
+      const k = JSON.stringify(ids);
+      if (k === "{}" || (k === helloSent && Date.now() - helloAt < 6 * 3600000)) return;
+      helloSent = k; helloAt = Date.now();
+      hub("POST", "/v1/hello", { ids });
+    } catch (e) {}
+  }
+  setInterval(sayHello, 6 * 3600000);
+  setTimeout(sayHello, 15000);
   const people2 = new Map(); // "fluxer:id" -> person or null (fetched this session)
   const asking = new Set(); let askTimer = null;
   const badgeList = (person) => (person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : []);
