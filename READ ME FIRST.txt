@@ -18,13 +18,9 @@ WHAT'S IN IT
 - Fluxer servers on the left, Discord servers on the right.
 - Top left: the dashboard (right-click to change its picture). Top right: your DMs.
 - Ctrl+1 Fluxer, Ctrl+2 Discord, Ctrl+3 both, Ctrl+4 dashboard (Cmd on Mac).
-- Back and forward like a browser: the arrows at the top, your mouse's side buttons, or Alt+Left / Alt+Right
-  (Cmd+[ / Cmd+] on Mac).
 - T, P and X in the title bar: TikTok, Pinterest and X.
 - Closing the window keeps it running in the tray (you can turn that off on the dashboard).
 - Animations: Off, Smooth or Ultra, in the App section of the dashboard.
-- Watching a stream and switching sides? It keeps playing in a small window in the corner. Drag it,
-  resize it from its top-left corner, or double-click it to go back.
 - Want to share it? "Send BelleCord to a friend" in the App section gives you a link and a message to send.
 
 THE DASHBOARD

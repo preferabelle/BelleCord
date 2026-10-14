@@ -230,10 +230,6 @@ app.on("web-contents-created", (e, wc) => {
   // Ctrl+1 to Ctrl+4 switch sides even while you're typing inside Fluxer or Discord
   wc.on("before-input-event", (ev, input) => {
     if (input.type === "keyDown" && (MAC ? input.meta : input.control) && !input.alt && !input.shift && /^[1-4]$/.test(input.key) && win) { ev.preventDefault(); win.webContents.send("switch", Number(input.key)); }
-    // Alt+Left and Alt+Right (Cmd+[ and Cmd+] on a Mac): back and forward through the places you've been
-    const back = MAC ? input.meta && input.key === "[" : input.alt && !input.control && input.key === "ArrowLeft";
-    const fwd = MAC ? input.meta && input.key === "]" : input.alt && !input.control && input.key === "ArrowRight";
-    if (input.type === "keyDown" && (back || fwd) && win) { ev.preventDefault(); win.webContents.send("nav", back ? "back" : "forward"); }
   });
   const inPanel = () => { try { return PANEL_PARTS.some((p) => wc.session === session.fromPartition(p)); } catch { return false; } };
   const inPinterest = () => { try { return wc.session === session.fromPartition("persist:pinterest"); } catch { return false; } };
@@ -271,9 +267,6 @@ function open() {
   });
   win.webContents.on("will-navigate", (e) => e.preventDefault()); // the app's own page never turns into a website
   win.once("ready-to-show", () => win.show());
-  // the back and forward buttons on the side of a mouse
-  win.on("app-command", (e, cmd) => { if (cmd === "browser-backward" || cmd === "browser-forward") win.webContents.send("nav", cmd === "browser-backward" ? "back" : "forward"); });
-  win.on("swipe", (e, dir) => { if (dir === "left" || dir === "right") win.webContents.send("nav", dir === "right" ? "back" : "forward"); }); // (a Mac trackpad: swiping right goes back, like Safari)
   win.on("close", (e) => { savePlace(); flushAll(); if (!quitting && keepInTray() && tray) { e.preventDefault(); win.hide(); } });
   win.on("closed", () => { win = null; });
   win.loadFile(SHELL);
