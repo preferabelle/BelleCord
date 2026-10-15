@@ -78,34 +78,31 @@ const sysTop = (() => {
   let ps = null, buf = "", waiting = null, idleT = null, chain = Promise.resolve();
   let lastCpu = new Map(), lastAt = 0, lastTimes = null;
   const names = new Map(); // (Windows: "chrome" -> "Google Chrome", from the program's own description)
-  const SCRIPT = [
-    "$ErrorActionPreference='SilentlyContinue'",
-    "$ic=[Globalization.CultureInfo]::InvariantCulture",
-    "[Console]::OutputEncoding=[Text.Encoding]::UTF8",
-    "while($true){",
-    " $l=[Console]::In.ReadLine(); if($l -eq $null){break}",
-    " $sb=New-Object Text.StringBuilder",
-    " if($l.StartsWith('D ')){",
-    "  foreach($n in $l.Substring(2).Split('|')){ $d=''; try{ $d=(Get-Process -Name $n | Where-Object { $_.Description } | Select-Object -First 1).Description }catch{}; [void]$sb.Append($n).Append('|').Append($d).Append(\"`n\") }",
-    " } else {",
-    "  foreach($p in [Diagnostics.Process]::GetProcesses()){ $c=0.0; try{ $c=$p.TotalProcessorTime.TotalSeconds }catch{}; $m=0; try{ $m=$p.WorkingSet64 }catch{}",
-    "   [void]$sb.Append($p.Id).Append('|').Append($p.ProcessName).Append('|').Append($c.ToString('0.000',$ic)).Append('|').Append($m).Append(\"`n\") }",
-    " }",
-    " [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END')",
-    "}",
-  ].join("\n");
+  // (PowerShell reads its commands one line at a time from us: "-Command -", the way that works on every Windows.
+  //  The two helpers are sent once, each on one line; then each question is just "bcS" or "bcD 'a|b'".)
+  const SETUP = [
+    "$ErrorActionPreference='SilentlyContinue'; $ProgressPreference='SilentlyContinue'; $bcIc=[Globalization.CultureInfo]::InvariantCulture",
+    "function bcS { $sb=New-Object Text.StringBuilder; foreach($p in [Diagnostics.Process]::GetProcesses()){ $c=0.0; try{ $c=$p.TotalProcessorTime.TotalSeconds }catch{}; $m=0; try{ $m=$p.WorkingSet64 }catch{}; [void]$sb.Append($p.Id).Append('|').Append($p.ProcessName).Append('|').Append($c.ToString('0.000',$bcIc)).Append('|').Append($m).Append([char]10) }; [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END'); [Console]::Out.Flush() }",
+    "function bcD($l) { $sb=New-Object Text.StringBuilder; foreach($n in $l.Split('|')){ $d=''; try{ $d=(Get-Process -Name $n | Where-Object { $_.Description } | Select-Object -First 1).Description }catch{}; [void]$sb.Append($n).Append('|').Append($d).Append([char]10) }; [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END'); [Console]::Out.Flush() }",
+  ].join("\n") + "\n";
+  let why = ""; // (the last thing that went wrong, shown under "Details")
+  const PS = () => { const root = process.env.SystemRoot || process.env.windir || "C:\\Windows"; const full = require("path").join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"); return require("fs").existsSync(full) ? full : "powershell.exe"; };
   function start() {
     try {
-      ps = cp.spawn("powershell.exe", ["-NoProfile", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(SCRIPT, "utf16le").toString("base64")], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+      ps = cp.spawn(PS(), ["-NoProfile", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
       ps.stdout.setEncoding("utf8");
       ps.stdout.on("data", (d) => {
         buf += d;
         const m = buf.match(/(^|\n)END\r?\n/);
         if (m && waiting) { const out = buf.slice(0, m.index); buf = buf.slice(m.index + m[0].length); const w = waiting; waiting = null; w(out); }
       });
-      ps.on("exit", () => { ps = null; if (waiting) { const w = waiting; waiting = null; w(null); } });
-      ps.on("error", () => {});
-    } catch { ps = null; }
+      ps.stderr.setEncoding("utf8");
+      ps.stderr.on("data", (d) => { why = ("PowerShell: " + String(d).trim()).slice(0, 300); });
+      ps.on("exit", (code) => { if (!why) why = "PowerShell closed (" + code + ")"; ps = null; if (waiting) { const w = waiting; waiting = null; w(null); } });
+      ps.on("error", (e) => { why = "PowerShell didn't start: " + (e && e.message); });
+      ps.stdin.on("error", () => {});
+      ps.stdin.write(SETUP);
+    } catch (e) { why = "PowerShell didn't start: " + (e && e.message); ps = null; }
   }
   function ask(line) {
     chain = chain.then(() => new Promise((resolve) => {
@@ -113,19 +110,26 @@ const sysTop = (() => {
       if (!ps) return resolve(null);
       clearTimeout(idleT);
       idleT = setTimeout(() => { try { ps && ps.kill(); } catch {} ps = null; }, 20000);
-      const t = setTimeout(() => { if (waiting) { waiting = null; try { ps && ps.kill(); } catch {} ps = null; resolve(null); } }, 10000);
+      const t = setTimeout(() => { if (waiting) { waiting = null; why = why || "PowerShell took too long"; try { ps && ps.kill(); } catch {} ps = null; resolve(null); } }, 10000);
       buf = "";
       waiting = (out) => { clearTimeout(t); resolve(out); };
       try { ps.stdin.write(line + "\n"); } catch { waiting = null; clearTimeout(t); resolve(null); }
     }));
     return chain;
   }
+  // (if PowerShell can't be used at all, "tasklist" still gives every program and its memory, just no CPU)
+  async function tasklist() {
+    const out = await run("tasklist", ["/fo", "csv", "/nh"]);
+    if (!out) return null;
+    return out.split(/\r?\n/).map((l) => l.match(/^"([^"]*)","(\d+)","[^"]*","[^"]*","([^"]*)"/)).filter(Boolean).map((m) => ({ pid: Number(m[2]), name: m[1].replace(/\.exe$/i, ""), pct: 0, noCpu: true, mem: Number(m[3].replace(/[^\d]/g, "")) / 1024 }));
+  }
   const run = (cmd, args) => new Promise((resolve) => { try { cp.execFile(cmd, args, { maxBuffer: 8 << 20, windowsHide: true }, (e, out) => resolve(e ? null : String(out))); } catch { resolve(null); } });
   // [{pid, name, sec (CPU seconds so far) or pct, mem (MB)}]
   async function sample() {
     if (WIN) {
-      const out = await ask("S");
-      if (!out) return null;
+      let out = await ask("bcS");
+      if (!out) out = await ask("bcS"); // (once more: the first start can be slow)
+      if (!out) return await tasklist();
       return out.split(/\r?\n/).map((l) => l.split("|")).filter((a) => a.length >= 4).map((a) => ({ pid: Number(a[0]), name: a[1], sec: Number(String(a[2]).replace(",", ".")) || 0, mem: (Number(a[3]) || 0) / 1048576 }));
     }
     if (LINUX) {
@@ -157,7 +161,8 @@ const sysTop = (() => {
   // ownPids: this app's own processes (shown together as "BelleCord"); ownNames: program names that are BelleCord too
   return async function top(ownPids, ownNames) {
     const list = await sample();
-    if (!list) return null;
+    if (ps && ps.pid && ownPids) ownPids.add(ps.pid); // (the little PowerShell helper is BelleCord's too)
+    if (!list || !list.length) return { list: null, why: why || "Couldn't list the programs" };
     const now = Date.now(), wall = lastAt ? (now - lastAt) / 1000 : 0;
     const prev = lastCpu, cur = new Map();
     const groups = new Map();
@@ -178,10 +183,10 @@ const sysTop = (() => {
     // nicer names for the biggest ones (Windows knows "Google Chrome" for "chrome"); asked in the background
     if (WIN) {
       const want = all.sort((a, b) => b.mem - a.mem).slice(0, 25).filter((g) => !g.me && !names.has(g.raw.toLowerCase())).map((g) => g.raw);
-      if (want.length) { for (const n of want) names.set(n.toLowerCase(), ""); ask("D " + want.join("|")).then((out) => { for (const l of String(out || "").split(/\r?\n/)) { const [n, d] = l.split("|"); if (n && d && d.trim()) names.set(n.toLowerCase(), d.trim()); } }); }
+      if (want.length) { for (const n of want) names.set(n.toLowerCase(), ""); ask("bcD '" + want.join("|").replace(/'/g, "''") + "'").then((out) => { for (const l of String(out || "").split(/\r?\n/)) { const [n, d] = l.split("|"); if (n && d && d.trim()) names.set(n.toLowerCase(), d.trim()); } }); }
     }
     const out = all.map((g) => ({ name: g.me ? "BelleCord" : names.get(g.raw.toLowerCase()) || pretty(g.raw), mem: Math.round(g.mem), cpu: Math.round(g.cpu * 10) / 10, count: g.count, me: g.me }));
-    return { list: out, cpu: cpuTotal(), mem: memUsed(), cpuReady: !first, cores };
+    return { list: out, cpu: cpuTotal(), mem: memUsed(), cpuReady: !first && !list.some((p) => p.noCpu), cores, why: list.some((p) => p.noCpu) ? why : "" };
   };
 })();
 ipcMain.handle("perf:system", async () => { try { return await sysTop(new Set(app.getAppMetrics().map((m) => m.pid)), /^bellecord(\.exe)?$/i); } catch { return null; } });

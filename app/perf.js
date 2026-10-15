@@ -159,8 +159,8 @@
     "#s-perf .usage .num{color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}#s-perf .usage .me{color:var(--accent);font-weight:700}",
     "#s-perf .usage .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}#s-perf .usage .nm small{color:var(--dim);margin-left:4px}",
     "#s-perf .big{display:flex;gap:24px;align-items:baseline;margin-bottom:10px;flex-wrap:wrap}#s-perf .big b{font-size:26px;color:var(--strong)}#s-perf .big span{color:var(--dim);font-size:12px;margin-left:4px}",
-    "#s-perf .sys{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}#s-perf .syshead{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}#s-perf .syshead b{color:var(--strong)}#s-perf .syshead .sp{flex:1}",
-    "#s-perf .syshead button{padding:3px 10px;font-size:12px}#s-perf .syshead button.on{outline:2px solid var(--accent)}#pf-sys.all{max-height:340px;overflow:auto;padding-right:4px}",
+    "#s-perf .big .sp{flex:1}#s-perf .sorts{display:flex;gap:6px;align-self:center}#s-perf .sorts button{padding:3px 10px;font-size:12px}#s-perf .sorts button.on{outline:2px solid var(--accent)}",
+    "#pf-parts.all{max-height:340px;overflow:auto;padding-right:4px}#s-perf .usage .subl{grid-column:1/-1;color:var(--dim);font-size:11px;margin:-4px 0 2px 2px}",
     "#s-perf .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}",
     "#s-perf .presets button{text-align:left;padding:10px 12px;display:flex;flex-direction:column;gap:2px}#s-perf .presets button small{color:var(--dim);font-size:11px}#s-perf .presets button.on{outline:2px solid var(--accent)}",
     "#s-perf .opts label{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}#s-perf .opts label:first-child{border-top:0}",
@@ -174,8 +174,8 @@
   const sec = document.createElement("section");
   sec.className = "sec"; sec.id = "s-perf";
   sec.innerHTML = '<h2>Performance</h2>' +
-    '<div class="card"><div class="big"><div><b id="pf-cpu">-</b><span>CPU</span></div><div><b id="pf-mem">-</b><span>memory</span></div><div class="dim small" id="pf-gpu"></div></div><div class="usage" id="pf-parts"></div>' +
-    '<div class="sys"><div class="syshead"><b>On your computer</b><span class="dim small" id="pf-systot"></span><span class="sp"></span><button data-pfsort="cpu" class="on" title="Most energy first (how hard each one makes the computer work)">Energy use</button><button data-pfsort="mem">Memory</button><button id="pf-all">Show all</button></div><div class="usage" id="pf-sys"><span class="dim small" style="grid-column:1/-1">Looking...</span></div><div class="dim small" id="pf-cmp" style="margin-top:8px"></div></div></div>' +
+    '<div class="card"><div class="big"><div><b id="pf-cpu">-</b><span>CPU</span></div><div><b id="pf-mem">-</b><span>memory</span></div><div class="dim small" id="pf-gpu"></div><span class="sp"></span><span class="sorts"><button data-pfsort="cpu" class="on" title="Most energy first (how hard each one makes the computer work)">Energy use</button><button data-pfsort="mem">Memory</button><button id="pf-all">Show all</button></span></div>' +
+    '<div class="usage" id="pf-parts"></div><div class="dim small" id="pf-foot" style="margin-top:8px"></div></div>' +
     '<h3 class="sub">Presets</h3><div class="presets" id="pf-presets"></div>' +
     '<div class="card opts" id="pf-opts"></div>' +
     '<div class="acts"><button id="pf-clean" title="The sites\' saved copies of pictures and files. You stay signed in.">🧹 Clean up</button><button id="pf-reload" title="Reloads the side you\'re not looking at, which frees what it built up over a long time">🔄 Refresh the hidden side</button><span class="dim small" id="pf-msg"></span></div>';
@@ -219,23 +219,14 @@
   new MutationObserver(() => { if ($("pf-presets")) drawPresets(); }).observe(body, { attributes: true, attributeFilter: ["data-motion"] });
 
   // ---------------- the numbers (only while you can see them) ----------------
-  const LABEL = { fluxer: "Fluxer (inside BelleCord)", discord: "Discord (inside BelleCord)", app: "BelleCord's own parts", gpu: "Drawing the screen", links: "Quick links" };
-  const TIP = { app: "The dashboard, the title bar and everything else BelleCord shows", gpu: "Graphics: the part that draws BelleCord on your screen (with the graphics card, if it's on). Every app has one, Fluxer and Discord too.", links: "TikTok, Pinterest and X in the title bar" };
+  // One list with bars: the 5 programs on the computer using the most energy (or memory), BelleCord always in it, and
+  // the Fluxer and Discord apps too when they're open (to compare). Under BelleCord: what's inside it.
+  // The big numbers at the top are BelleCord's own.
+  const PART = { fluxer: "Fluxer inside it", discord: "Discord inside it", app: "its own parts", gpu: "drawing the screen", links: "quick links" };
+  const TIP = { app: "The dashboard, the title bar and everything else BelleCord shows", gpu: "Drawing the screen: the part that draws BelleCord on your screen (with the graphics card, if it's on). Every app has one, Fluxer and Discord too.", links: "TikTok, Pinterest and X in the title bar" };
   const mb = (n) => (n >= 1024 ? (n / 1024).toFixed(1) + " GB" : Math.round(n) + " MB");
   const visible = () => { if (body.dataset.mode !== "dash") return false; const r = sec.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
-  async function usage() {
-    if (!visible() || !host.perfUsage) return;
-    let u; try { u = await host.perfUsage(); } catch { return; }
-    if (!u) return;
-    $("pf-cpu").textContent = u.total.cpu.toFixed(1) + "%";
-    $("pf-mem").textContent = mb(u.total.mem);
-    $("pf-gpu").textContent = u.gpu ? "" : "Graphics card: off";
-    const max = Math.max(1, ...Object.values(u.parts).map((p) => p.mem));
-    const sleeping = SIDES.filter((s) => st[s].asleep);
-    $("pf-parts").innerHTML = Object.entries(u.parts).filter(([k, p]) => p.mem > 1 || k === "fluxer" || k === "discord").sort((a, b) => b[1].mem - a[1].mem).map(([k, p]) =>
-      '<span title="' + esc(TIP[k] || "") + '">' + esc(LABEL[k] || k) + (sleeping.includes(k) ? ' <span class="dim small">(asleep)</span>' : "") + '</span><div class="bar"><i style="width:' + Math.round((p.mem / max) * 100) + '%"></i></div><span class="num">' + mb(p.mem) + '</span><span class="num">' + p.cpu.toFixed(1) + "%</span>").join("");
-  }
-  let sortBy = "cpu", showAll = false, sysBusy = false, lastSys = null;
+  let sortBy = "cpu", showAll = false, sysBusy = false, lastSys = null, lastUse = null, sysWhy = "", sysTries = 0;
   const smooth = new Map(); // (energy use, evened out over the last few looks so the list doesn't jump around)
   function settle(s) {
     const seen = new Set();
@@ -249,41 +240,63 @@
     for (const k of [...smooth.keys()]) if (!seen.has(k)) smooth.delete(k);
     return s;
   }
-  function drawSys() {
-    const s = lastSys;
-    if (!s || !s.list) return;
-    const val = (x) => (sortBy === "cpu" ? x.e : x.mem);
-    const list = s.list.slice().sort((a, b) => val(b) - val(a) || b.mem - a.mem);
-    const shown = showAll ? list.filter((x) => x.mem >= 1 || x.e > 0) : list.slice(0, 5);
-    // (BelleCord is always on the list, and so are the Fluxer and Discord apps when they're open, to compare)
-    const keep = list.filter((x) => x.me || /\b(fluxer|discord)\b/i.test(x.name));
-    if (!showAll) for (const x of keep) if (!shown.includes(x)) shown.push(x);
-    const max = Math.max(0.1, ...list.map(val));
-    $("pf-sys").innerHTML = shown.map((x) =>
-      '<span class="nm' + (x.me ? " me" : "") + '" title="' + esc(x.name) + (x.count > 1 ? " (" + x.count + " parts)" : "") + '">' + esc(x.name) + (x.count > 1 ? "<small>×" + x.count + "</small>" : "") + "</span>" +
-      '<div class="bar"><i style="width:' + Math.round((val(x) / max) * 100) + '%"></i></div><span class="num">' + mb(x.mem) + '</span><span class="num">' + (s.cpuReady ? x.e.toFixed(1) + "%" : "-") + "</span>").join("");
-    const bits = [];
-    if (s.cpu != null) bits.push("CPU " + Math.round(s.cpu) + "%");
-    if (s.mem) bits.push(mb(s.mem.used) + " of " + mb(s.mem.total) + " memory");
-    $("pf-systot").textContent = bits.length ? "Whole computer: " + bits.join(", ") : "";
-    const fx = list.some((x) => !x.me && /\bfluxer\b/i.test(x.name)), dc = list.some((x) => !x.me && /\bdiscord\b/i.test(x.name));
-    $("pf-cmp").textContent = fx && dc ? "" : "Want to compare? Open the " + (!fx && !dc ? "Fluxer or Discord app" : !fx ? "Fluxer app" : "Discord app") + " and it shows up here next to BelleCord.";
+  const row = (name, tip, cls, pct, mem, cpu) => '<span class="nm' + (cls ? " " + cls : "") + '" title="' + esc(tip || name) + '">' + name + '</span><div class="bar"><i style="width:' + Math.max(0, Math.min(100, Math.round(pct))) + '%"></i></div><span class="num">' + mb(mem) + '</span><span class="num">' + cpu + "</span>";
+  function draw() {
+    const u = lastUse, s = lastSys;
+    const sleeping = SIDES.filter((x) => st[x].asleep);
+    const inside = u ? Object.entries(u.parts).filter(([k, p]) => p.mem > 1 || k === "fluxer" || k === "discord").sort((a, b) => b[1].mem - a[1].mem).map(([k, p]) => '<span title="' + esc(TIP[k] || "") + '">' + esc(PART[k] || k) + " " + (sleeping.includes(k) ? "(asleep)" : mb(p.mem)) + "</span>").join(" · ") : "";
+    const notes = [];
+    if (s && s.list) {
+      const val = (x) => (sortBy === "cpu" ? x.e : x.mem);
+      const list = s.list.slice().sort((a, b) => val(b) - val(a) || b.mem - a.mem);
+      const shown = showAll ? list.filter((x) => x.mem >= 1 || x.e > 0) : list.slice(0, 5);
+      for (const x of list) if (!showAll && (x.me || /\b(fluxer|discord)\b/i.test(x.name)) && !shown.includes(x)) shown.push(x);
+      const max = Math.max(0.1, ...shown.map(val));
+      $("pf-parts").innerHTML = shown.map((x) => {
+        let h = row(esc(x.name) + (x.count > 1 ? "<small>×" + x.count + "</small>" : ""), x.name + (x.count > 1 ? " (" + x.count + " parts)" : ""), x.me ? "me" : "", (val(x) / max) * 100, x.mem, s.cpuReady ? x.e.toFixed(1) + "%" : "-");
+        if (x.me && inside) h += '<small class="subl">' + inside + "</small>";
+        return h;
+      }).join("");
+      const fx = list.some((x) => !x.me && /\bfluxer\b/i.test(x.name)), dc = list.some((x) => !x.me && /\bdiscord\b/i.test(x.name));
+      if (!fx || !dc) notes.push("To compare, open the " + (!fx && !dc ? "Fluxer or Discord app" : !fx ? "Fluxer app" : "Discord app") + " and it shows up here next to BelleCord.");
+      if (!s.cpuReady && s.why) notes.push("Energy use can't be read right now, so this is by memory.");
+      const bits = [];
+      if (s.cpu != null) bits.push("CPU " + Math.round(s.cpu) + "%");
+      if (s.mem) bits.push(mb(s.mem.used) + " of " + mb(s.mem.total) + " memory");
+      if (bits.length) notes.push("Whole computer: " + bits.join(", ") + ".");
+    } else if (u) {
+      // (until the rest of the computer is read: BelleCord's own parts)
+      const parts = Object.entries(u.parts).filter(([k, p]) => p.mem > 1 || k === "fluxer" || k === "discord").sort((a, b) => b[1].mem - a[1].mem);
+      const max = Math.max(1, ...parts.map(([, p]) => p.mem));
+      $("pf-parts").innerHTML = parts.map(([k, p]) => row(esc((PART[k] || k).replace(/^./, (c) => c.toUpperCase())) + (sleeping.includes(k) ? " (asleep)" : ""), TIP[k], "", (p.mem / max) * 100, p.mem, p.cpu.toFixed(1) + "%")).join("");
+      notes.push(sysTries < 2 ? "Reading the rest of your computer..." : "Couldn't read the rest of your computer this time. It keeps trying.");
+    }
+    $("pf-foot").innerHTML = notes.map(esc).join(" ") + (!(s && s.list) && sysWhy && sysTries >= 2 ? ' <span title="' + esc(sysWhy) + '" style="text-decoration:underline dotted;cursor:help">Details</span>' : "");
+  }
+  async function usage() {
+    if (!visible() || !host.perfUsage) return;
+    let u; try { u = await host.perfUsage(); } catch { return; }
+    if (!u) return;
+    lastUse = u;
+    $("pf-cpu").textContent = u.total.cpu.toFixed(1) + "%";
+    $("pf-mem").textContent = mb(u.total.mem);
+    $("pf-gpu").textContent = "BelleCord" + (u.gpu ? "" : " (graphics card: off)");
+    draw();
   }
   async function system() {
-    if (!visible() || sysBusy) return;
-    if (!host.perfSystem) return;
+    if (!visible() || sysBusy || !host.perfSystem) return;
     sysBusy = true;
-    try {
-      const s = await host.perfSystem();
-      if (s && s.list) { lastSys = settle(s); drawSys(); }
-      else if (!lastSys) $("pf-sys").innerHTML = '<span class="dim small" style="grid-column:1/-1">Couldn\'t read that this time. It tries again in a moment.</span>';
-    } catch { if (!lastSys) $("pf-sys").innerHTML = '<span class="dim small" style="grid-column:1/-1">Couldn\'t read that this time. Restarting BelleCord usually fixes it.</span>'; }
+    let s = null;
+    try { s = await host.perfSystem(); } catch (e) { sysWhy = String((e && e.message) || e); }
+    sysTries++;
+    if (s && s.list) { lastSys = settle(s); sysWhy = ""; } else if (s && s.why) sysWhy = s.why;
+    draw();
     sysBusy = false;
   }
   setInterval(usage, 2500);
   setInterval(system, 3000);
-  sec.querySelectorAll("[data-pfsort]").forEach((b) => (b.onclick = () => { sortBy = b.dataset.pfsort; sec.querySelectorAll("[data-pfsort]").forEach((x) => x.classList.toggle("on", x === b)); drawSys(); }));
-  $("pf-all").onclick = (e) => { showAll = !showAll; e.target.textContent = showAll ? "Top 5" : "Show all"; $("pf-sys").classList.toggle("all", showAll); drawSys(); };
+  sec.querySelectorAll("[data-pfsort]").forEach((b) => (b.onclick = () => { sortBy = b.dataset.pfsort; sec.querySelectorAll("[data-pfsort]").forEach((x) => x.classList.toggle("on", x === b)); draw(); }));
+  $("pf-all").onclick = (e) => { showAll = !showAll; e.target.textContent = showAll ? "Top 5" : "Show all"; $("pf-parts").classList.toggle("all", showAll); draw(); };
 
   $("pf-clean").onclick = async () => {
     $("pf-msg").textContent = "Cleaning...";
