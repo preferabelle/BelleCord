@@ -313,6 +313,48 @@
     $("pf-msg").textContent = "Refreshed " + sides.map((s) => NAME[s]).join(" and ") + ".";
   };
 
+  // ---------------- never stuck: an invisible layer over everything gets out of the way ----------------
+  // If something see-through ever ends up covering the window (so nothing but the title bar can be clicked), it's
+  // found within a few seconds and clicks go through it. A layer has to stay invisible across two checks first, so
+  // something that's just fading in is left alone.
+  const seeThrough = (el) => {
+    let o = 1;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.visibility === "hidden" || cs.display === "none") return true;
+      o *= Number(cs.opacity) || 0;
+      if (o < 0.04) return true;
+    }
+    return false;
+  };
+  const suspects = new WeakSet();
+  const moved = new Set(); // (layers clicks go through: back to normal the moment they can be seen again)
+  function unstick() {
+    if (document.hidden) return;
+    for (const n of [...moved]) if (!n.isConnected || !seeThrough(n)) { n.style.removeProperty("pointer-events"); moved.delete(n); }
+    const W = innerWidth, H = innerHeight;
+    for (const [x, y] of [[0.5, 0.5], [0.3, 0.4], [0.7, 0.6], [0.5, 0.85], [0.15, 0.5]]) {
+      const hit = document.elementFromPoint(W * x, H * y);
+      if (!hit || hit === document.body || hit === document.documentElement) continue;
+      for (let n = hit, i = 0; n && n !== body && i < 8; n = n.parentElement, i++) {
+        const cs = getComputedStyle(n);
+        if (cs.pointerEvents === "none") break;
+        if (cs.position !== "fixed" && cs.position !== "absolute" && n.tagName !== "WEBVIEW") continue;
+        const r = n.getBoundingClientRect();
+        if (r.width < W * 0.6 || r.height < H * 0.6) continue;
+        if (!seeThrough(n)) break;
+        if (!suspects.has(n)) { suspects.add(n); break; }
+        suspects.delete(n);
+        n.style.setProperty("pointer-events", "none", "important");
+        moved.add(n);
+        try { console.warn("BelleCord: an invisible layer was covering the window, so clicks now go through it:", n); } catch {}
+        break;
+      }
+    }
+  }
+  setInterval(unstick, 1500);
+  window.addEventListener("focus", unstick);
+
   // start once the settings are read
   const wait = setInterval(() => { if (!window.bcPref || !window.bcPrefsReady) return; clearInterval(wait); gpuStarted = opt("gpu"); drawOpts(); apply(); }, 200);
 })();
