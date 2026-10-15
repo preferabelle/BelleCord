@@ -59,6 +59,46 @@ ipcMain.handle("perf:usage", () => {
   const total = Object.values(parts).reduce((a, p) => ({ cpu: a.cpu + p.cpu, mem: a.mem + p.mem }), { cpu: 0, mem: 0 });
   return { parts, total, gpu: !readPrefs().noGpu };
 });
+// ---- Top apps on the computer (Performance): the 6 programs using the most memory, with their CPU ----
+// (Windows: one quick look at its own process counters; Mac/Linux: ps. Read at most every 4 seconds.)
+const osTop = { at: 0, last: null, busy: null };
+function readTopApps() {
+  const os = require("os"), { execFile } = require("child_process");
+  const cores = Math.max(1, os.cpus().length);
+  const done = (rows) => {
+    const by = new Map();
+    for (const r of rows) {
+      let n = String(r.name || "").replace(/#\d+$/, "").replace(/\.exe$/i, "").split("/").pop().trim();
+      if (!n || /^(_total|idle|system idle process)$/i.test(n)) continue;
+      const g = by.get(n.toLowerCase()) || { name: n, cpu: 0, mem: 0, count: 0 };
+      g.cpu += r.cpu || 0; g.mem += r.mem || 0; g.count++;
+      by.set(n.toLowerCase(), g);
+    }
+    const apps = [...by.values()].map((a) => ({ ...a, cpu: Math.min(100, a.cpu / cores) })).sort((a, b) => b.mem - a.mem).slice(0, 6);
+    return { apps, totalMem: os.totalmem() / 1048576, freeMem: os.freemem() / 1048576 };
+  };
+  return new Promise((ok) => {
+    if (process.platform === "win32") {
+      const ps = "Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Select-Object Name,PercentProcessorTime,WorkingSetPrivate | ConvertTo-Json -Compress";
+      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true, timeout: 8000, maxBuffer: 8 << 20 }, (err, out) => {
+        let list = []; try { list = JSON.parse(out); if (!Array.isArray(list)) list = [list]; } catch {}
+        ok(done(list.map((p) => ({ name: p.Name, cpu: Number(p.PercentProcessorTime) || 0, mem: (Number(p.WorkingSetPrivate) || 0) / 1048576 }))));
+      });
+    } else {
+      execFile("ps", ["-Ao", "%cpu=,rss=,comm="], { timeout: 5000, maxBuffer: 8 << 20 }, (err, out) => {
+        const rows = String(out || "").split("\n").map((l) => l.trim().match(/^([\d.]+)\s+(\d+)\s+(.+)$/)).filter(Boolean)
+          .map((m) => ({ name: m[3], cpu: Number(m[1]) * 1, mem: Number(m[2]) / 1024 }));
+        ok(done(rows)); // (ps counts CPU per core, like Windows, so both get divided by the cores)
+      });
+    }
+  });
+}
+async function topApps() {
+  if (osTop.last && Date.now() - osTop.at < 4000) return osTop.last;
+  if (!osTop.busy) osTop.busy = readTopApps().then((r) => { osTop.last = r; osTop.at = Date.now(); osTop.busy = null; return r; }).catch(() => { osTop.busy = null; return osTop.last; });
+  return osTop.busy;
+}
+ipcMain.handle("perf:top", () => topApps());
 ipcMain.handle("perf:spell", (e, on) => { for (const p of ["persist:fluxer", "persist:discord"]) { try { session.fromPartition(p).setSpellCheckerEnabled(!!on); } catch {} } return true; });
 // lighter memory: the sites' saved copies of pictures and files (sign-ins and settings stay)
 ipcMain.handle("perf:clean", async () => {
@@ -66,137 +106,6 @@ ipcMain.handle("perf:clean", async () => {
   for (const p of PARTS) { try { const ses = session.fromPartition(p); freed += await ses.getCacheSize(); await ses.clearCache(); await ses.clearCodeCaches({}).catch(() => {}); } catch {} }
   return { mb: Math.round(freed / 1048576) };
 });
-// ---- Performance > "On your computer": every program running on the computer, grouped by name (all of Chrome's
-// processes are one "Chrome"), with its memory and CPU. Only asked for while that part of the dashboard is on screen.
-// Windows: one small hidden PowerShell that stays open while it's being asked (starting one every time costs more)
-// and closes after 20 seconds of nobody looking. Mac and Linux: "ps".
-const sysTop = (() => {
-  const os = require("os");
-  const cp = require("child_process");
-  const WIN = process.platform === "win32", LINUX = process.platform === "linux";
-  const cores = Math.max(1, os.cpus().length);
-  let ps = null, buf = "", waiting = null, idleT = null, chain = Promise.resolve();
-  let lastCpu = new Map(), lastAt = 0, lastTimes = null;
-  const names = new Map(); // (Windows: "chrome" -> "Google Chrome", from the program's own description)
-  // (PowerShell reads its commands one line at a time from us: "-Command -", the way that works on every Windows.
-  //  The two helpers are sent once, each on one line; then each question is just "bcS" or "bcD 'a|b'".)
-  const SETUP = [
-    "$ErrorActionPreference='SilentlyContinue'; $ProgressPreference='SilentlyContinue'; $bcIc=[Globalization.CultureInfo]::InvariantCulture",
-    "function bcS { $sb=New-Object Text.StringBuilder; foreach($p in [Diagnostics.Process]::GetProcesses()){ $c=0.0; try{ $c=$p.TotalProcessorTime.TotalSeconds }catch{}; $m=0; try{ $m=$p.WorkingSet64 }catch{}; [void]$sb.Append($p.Id).Append('|').Append($p.ProcessName).Append('|').Append($c.ToString('0.000',$bcIc)).Append('|').Append($m).Append([char]10) }; [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END'); [Console]::Out.Flush() }",
-    "function bcD($l) { $sb=New-Object Text.StringBuilder; foreach($n in $l.Split('|')){ $d=''; try{ $d=(Get-Process -Name $n | Where-Object { $_.Description } | Select-Object -First 1).Description }catch{}; [void]$sb.Append($n).Append('|').Append($d).Append([char]10) }; [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END'); [Console]::Out.Flush() }",
-  ].join("\n") + "\n";
-  let why = ""; // (the last thing that went wrong, shown under "Details")
-  const PS = () => { const root = process.env.SystemRoot || process.env.windir || "C:\\Windows"; const full = require("path").join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"); return require("fs").existsSync(full) ? full : "powershell.exe"; };
-  function start() {
-    try {
-      ps = cp.spawn(PS(), ["-NoProfile", "-NoLogo", "-NoExit", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-      ps.stdout.setEncoding("utf8");
-      ps.stdout.on("data", (d) => {
-        buf += d;
-        const m = buf.match(/(^|\n)END\r?\n/);
-        if (m && waiting) { const out = buf.slice(0, m.index); buf = buf.slice(m.index + m[0].length); const w = waiting; waiting = null; w(out); }
-      });
-      ps.stderr.setEncoding("utf8");
-      ps.stderr.on("data", (d) => { why = ("PowerShell: " + String(d).trim()).slice(0, 300); });
-      ps.on("exit", (code) => { if (!why) why = "PowerShell closed (" + code + ")"; ps = null; if (waiting) { const w = waiting; waiting = null; w(null); } });
-      ps.on("error", (e) => { why = "PowerShell didn't start: " + (e && e.message); });
-      ps.stdin.on("error", () => {});
-      ps.stdin.write(SETUP);
-    } catch (e) { why = "PowerShell didn't start: " + (e && e.message); ps = null; }
-  }
-  function ask(line) {
-    chain = chain.then(() => new Promise((resolve) => {
-      if (!ps) start();
-      if (!ps) return resolve(null);
-      clearTimeout(idleT);
-      idleT = setTimeout(() => { try { ps && ps.kill(); } catch {} ps = null; }, 20000);
-      const t = setTimeout(() => { if (waiting) { waiting = null; why = why || "PowerShell took too long"; try { ps && ps.kill(); } catch {} ps = null; resolve(null); } }, 10000);
-      buf = "";
-      waiting = (out) => { clearTimeout(t); resolve(out); };
-      try { ps.stdin.write(line + "\n"); } catch { waiting = null; clearTimeout(t); resolve(null); }
-    }));
-    return chain;
-  }
-  // (if PowerShell can't be used at all, Windows' own "tasklist" gives every program, its memory and its CPU time)
-  const csv = (l) => { const out = []; const re = /"((?:[^"]|"")*)"/g; let m; while ((m = re.exec(l))) out.push(m[1]); return out; };
-  async function tasklist() {
-    const out = await run("tasklist", ["/v", "/fo", "csv", "/nh"]);
-    if (!out) { why = why || "tasklist didn't answer"; return null; }
-    return out.split(/\r?\n/).map(csv).filter((c) => c.length >= 8 && /^\d+$/.test(c[1])).map((c) => {
-      const t = String(c[7]).split(":").map(Number); // (CPU time, h:mm:ss)
-      const sec = t.length === 3 && t.every((n) => !isNaN(n)) ? t[0] * 3600 + t[1] * 60 + t[2] : null;
-      return { pid: Number(c[1]), name: c[0].replace(/\.exe$/i, ""), sec: sec ?? 0, noCpu: sec == null, mem: Number(String(c[4]).replace(/[^\d]/g, "")) / 1024 };
-    });
-  }
-  const run = (cmd, args) => new Promise((resolve) => { try { cp.execFile(cmd, args, { maxBuffer: 8 << 20, windowsHide: true }, (e, out) => resolve(e ? null : String(out))); } catch { resolve(null); } });
-  // [{pid, name, sec (CPU seconds so far) or pct, mem (MB)}]
-  async function sample() {
-    if (WIN) {
-      let out = await ask("bcS");
-      if (!out) out = await ask("bcS"); // (once more: the first start can be slow)
-      if (!out) return await tasklist();
-      return out.split(/\r?\n/).map((l) => l.split("|")).filter((a) => a.length >= 4).map((a) => ({ pid: Number(a[0]), name: a[1], sec: Number(String(a[2]).replace(",", ".")) || 0, mem: (Number(a[3]) || 0) / 1048576 }));
-    }
-    if (LINUX) {
-      const out = await run("ps", ["-A", "-o", "pid=,rss=,times=,comm="]);
-      if (!out) return null;
-      return out.split("\n").map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/)).filter(Boolean).map((m) => ({ pid: Number(m[1]), mem: Number(m[2]) / 1024, sec: Number(m[3]), name: m[4] }));
-    }
-    const out = await run("ps", ["-A", "-o", "pid=,pcpu=,rss=,comm="]);
-    if (!out) return null;
-    return out.split("\n").map((l) => l.trim().match(/^(\d+)\s+([\d.,]+)\s+(\d+)\s+(.+)$/)).filter(Boolean).map((m) => {
-      const full = m[4], app = full.match(/\/([^/]+)\.app\//);
-      return { pid: Number(m[1]), pct: Number(m[2].replace(",", ".")) / cores, mem: Number(m[3]) / 1024, name: app ? app[1] : full.split("/").pop() };
-    });
-  }
-  const pretty = (n) => { const s = String(n).replace(/\.exe$/i, ""); return s.charAt(0).toUpperCase() + s.slice(1); };
-  const SKIP = /^(idle|system idle process|_total)$/i;
-  function cpuTotal() {
-    let idle = 0, total = 0;
-    for (const c of os.cpus()) { for (const k in c.times) total += c.times[k]; idle += c.times.idle; }
-    const prev = lastTimes; lastTimes = { idle, total };
-    if (!prev || total <= prev.total) return null;
-    return Math.max(0, Math.min(100, 100 * (1 - (idle - prev.idle) / (total - prev.total))));
-  }
-  function memUsed() {
-    if (LINUX) { try { const t = require("fs").readFileSync("/proc/meminfo", "utf8"); const g = (k) => Number((t.match(new RegExp(k + ":\\s+(\\d+)")) || [])[1] || 0) / 1024; return { used: g("MemTotal") - g("MemAvailable"), total: g("MemTotal") }; } catch {} }
-    if (process.platform === "darwin") return null; // (macOS counts its file cache as used, so the number would look scary and mean little)
-    return { used: (os.totalmem() - os.freemem()) / 1048576, total: os.totalmem() / 1048576 };
-  }
-  // ownPids: this app's own processes (shown together as "BelleCord"); ownNames: program names that are BelleCord too;
-  // botPids: the bot's (shown as "BelleCord's bot")
-  return async function top(ownPids, ownNames, botPids) {
-    const list = await sample();
-    if (ps && ps.pid && ownPids) ownPids.add(ps.pid); // (the little PowerShell helper is BelleCord's too)
-    if (!list || !list.length) return { list: null, why: why || "Couldn't list the programs" };
-    const now = Date.now(), wall = lastAt ? (now - lastAt) / 1000 : 0;
-    const prev = lastCpu, cur = new Map();
-    const groups = new Map();
-    for (const p of list) {
-      if (SKIP.test(p.name) || p.pid === 0) continue;
-      let cpu = 0;
-      if (p.pct != null) cpu = p.pct;
-      else { cur.set(p.pid, p.sec); const was = prev.get(p.pid); if (wall > 0 && was != null && p.sec >= was) cpu = (100 * (p.sec - was)) / (wall * cores); }
-      const bot = !!(botPids && botPids.has(p.pid));
-      const me = !bot && !!((ownPids && ownPids.has(p.pid)) || (ownNames && ownNames.test(p.name)));
-      const key = bot ? "\u0000bot" : me ? "\u0000me" : String(p.name).toLowerCase();
-      const g = groups.get(key) || { key, raw: p.name, me, bot, mem: 0, cpu: 0, count: 0 };
-      g.mem += p.mem; g.cpu += cpu; g.count++;
-      groups.set(key, g);
-    }
-    const first = !lastAt && list.some((p) => p.pct == null);
-    lastCpu = cur; lastAt = now;
-    const all = [...groups.values()];
-    // nicer names for the biggest ones (Windows knows "Google Chrome" for "chrome"); asked in the background
-    if (WIN) {
-      const want = all.sort((a, b) => b.mem - a.mem).slice(0, 25).filter((g) => !g.me && !g.bot && !names.has(g.raw.toLowerCase())).map((g) => g.raw);
-      if (want.length) { for (const n of want) names.set(n.toLowerCase(), ""); ask("bcD '" + want.join("|").replace(/'/g, "''") + "'").then((out) => { for (const l of String(out || "").split(/\r?\n/)) { const [n, d] = l.split("|"); if (n && d && d.trim()) names.set(n.toLowerCase(), d.trim()); } }); }
-    }
-    const out = all.map((g) => ({ name: g.bot ? "BelleCord's bot" : g.me ? "BelleCord" : names.get(g.raw.toLowerCase()) || pretty(g.raw), mem: Math.round(g.mem), cpu: Math.round(g.cpu * 10) / 10, count: g.count, me: g.me, bot: g.bot }));
-    return { list: out, cpu: cpuTotal(), mem: memUsed(), cpuReady: !first && !list.every((p) => p.noCpu), cores, why: list.every((p) => p.noCpu) ? why : "" };
-  };
-})();
-ipcMain.handle("perf:system", async () => { try { return await sysTop(new Set(app.getAppMetrics().map((m) => m.pid)), /^bellecord(\.exe)?$/i); } catch { return null; } });
 ipcMain.handle("prefs:set", (e, changes) => (changes && typeof changes === "object" ? writePrefs(changes) : readPrefs()));
 // pictures (skin pictures, wallpapers, banners): one small file each, next to the settings
 const imgDir = () => path.join(app.getPath("userData"), "pictures");
