@@ -60,7 +60,10 @@
   }
 
   // ---------------- what they do on the sites ----------------
-  const CALM = "*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}";
+  // (the extra ":not(#...)" parts make it outrank the themes' moving backgrounds, which use the same trick to outrank
+  //  the sites: before this, a theme's pattern kept moving no matter what)
+  const B5 = ":root:not(#bcq1):not(#bcq2):not(#bcq3):not(#bcq4):not(#bcq5)";
+  const CALM = B5 + " *," + B5 + " *::before," + B5 + " *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}";
   const page = (fn, arg) => "(" + fn.toString() + ")(" + JSON.stringify(arg) + ")";
   function pageStyle(a) {
     // (the first version of this froze animations on their first frame, which left menus and settings invisible:
@@ -164,7 +167,7 @@
     "#s-perf .opts input{margin-top:3px;width:16px;height:16px;flex:none}#s-perf .opts small{display:block;color:var(--dim);font-size:12px}#s-perf .opts .rst{margin-top:6px;padding:4px 10px;font-size:12px}",
     "#s-perf .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}",
     // still: the dashboard's own animations jump to their end too (never frozen halfway)
-    "body.perf-still #dash *,body.perf-still #dash *::before,body.perf-still #dash *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important}",
+    B5 + " body.perf-still *," + B5 + " body.perf-still *::before," + B5 + " body.perf-still *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important}",
   ].join("\n");
   document.head.appendChild(css);
 
@@ -172,7 +175,7 @@
   sec.className = "sec"; sec.id = "s-perf";
   sec.innerHTML = '<h2>Performance</h2>' +
     '<div class="card"><div class="big"><div><b id="pf-cpu">-</b><span>CPU</span></div><div><b id="pf-mem">-</b><span>memory</span></div><div class="dim small" id="pf-gpu"></div></div><div class="usage" id="pf-parts"></div>' +
-    '<div class="sys"><div class="syshead"><b>On your computer</b><span class="dim small" id="pf-systot"></span><span class="sp"></span><button data-pfsort="mem" class="on">Memory</button><button data-pfsort="cpu">CPU</button><button id="pf-all">Show all</button></div><div class="usage" id="pf-sys"><span class="dim small" style="grid-column:1/-1">Looking...</span></div></div></div>' +
+    '<div class="sys"><div class="syshead"><b>On your computer</b><span class="dim small" id="pf-systot"></span><span class="sp"></span><button data-pfsort="cpu" class="on" title="Most energy first (how hard each one makes the computer work)">Energy use</button><button data-pfsort="mem">Memory</button><button id="pf-all">Show all</button></div><div class="usage" id="pf-sys"><span class="dim small" style="grid-column:1/-1">Looking...</span></div><div class="dim small" id="pf-cmp" style="margin-top:8px"></div></div></div>' +
     '<h3 class="sub">Presets</h3><div class="presets" id="pf-presets"></div>' +
     '<div class="card opts" id="pf-opts"></div>' +
     '<div class="acts"><button id="pf-clean" title="The sites\' saved copies of pictures and files. You stay signed in.">🧹 Clean up</button><button id="pf-reload" title="Reloads the side you\'re not looking at, which frees what it built up over a long time">🔄 Refresh the hidden side</button><span class="dim small" id="pf-msg"></span></div>';
@@ -216,7 +219,8 @@
   new MutationObserver(() => { if ($("pf-presets")) drawPresets(); }).observe(body, { attributes: true, attributeFilter: ["data-motion"] });
 
   // ---------------- the numbers (only while you can see them) ----------------
-  const LABEL = { fluxer: "Fluxer", discord: "Discord", app: "BelleCord itself", gpu: "Graphics", links: "Quick links" };
+  const LABEL = { fluxer: "Fluxer (inside BelleCord)", discord: "Discord (inside BelleCord)", app: "BelleCord's own parts", gpu: "Drawing the screen", links: "Quick links" };
+  const TIP = { app: "The dashboard, the title bar and everything else BelleCord shows", gpu: "Graphics: the part that draws BelleCord on your screen (with the graphics card, if it's on). Every app has one, Fluxer and Discord too.", links: "TikTok, Pinterest and X in the title bar" };
   const mb = (n) => (n >= 1024 ? (n / 1024).toFixed(1) + " GB" : Math.round(n) + " MB");
   const visible = () => { if (body.dataset.mode !== "dash") return false; const r = sec.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
   async function usage() {
@@ -229,25 +233,41 @@
     const max = Math.max(1, ...Object.values(u.parts).map((p) => p.mem));
     const sleeping = SIDES.filter((s) => st[s].asleep);
     $("pf-parts").innerHTML = Object.entries(u.parts).filter(([k, p]) => p.mem > 1 || k === "fluxer" || k === "discord").sort((a, b) => b[1].mem - a[1].mem).map(([k, p]) =>
-      "<span>" + esc(LABEL[k] || k) + (sleeping.includes(k) ? ' <span class="dim small">(asleep)</span>' : "") + '</span><div class="bar"><i style="width:' + Math.round((p.mem / max) * 100) + '%"></i></div><span class="num">' + mb(p.mem) + '</span><span class="num">' + p.cpu.toFixed(1) + "%</span>").join("");
+      '<span title="' + esc(TIP[k] || "") + '">' + esc(LABEL[k] || k) + (sleeping.includes(k) ? ' <span class="dim small">(asleep)</span>' : "") + '</span><div class="bar"><i style="width:' + Math.round((p.mem / max) * 100) + '%"></i></div><span class="num">' + mb(p.mem) + '</span><span class="num">' + p.cpu.toFixed(1) + "%</span>").join("");
   }
-  let sortBy = "mem", showAll = false, sysBusy = false, lastSys = null;
+  let sortBy = "cpu", showAll = false, sysBusy = false, lastSys = null;
+  const smooth = new Map(); // (energy use, evened out over the last few looks so the list doesn't jump around)
+  function settle(s) {
+    const seen = new Set();
+    for (const x of s.list) {
+      const k = x.me ? "\u0000me" : x.name;
+      seen.add(k);
+      const was = smooth.get(k);
+      x.e = s.cpuReady ? (was == null ? x.cpu : was * 0.6 + x.cpu * 0.4) : 0;
+      if (s.cpuReady) smooth.set(k, x.e);
+    }
+    for (const k of [...smooth.keys()]) if (!seen.has(k)) smooth.delete(k);
+    return s;
+  }
   function drawSys() {
     const s = lastSys;
     if (!s || !s.list) return;
-    const val = (x) => (sortBy === "cpu" ? x.cpu : x.mem);
+    const val = (x) => (sortBy === "cpu" ? x.e : x.mem);
     const list = s.list.slice().sort((a, b) => val(b) - val(a) || b.mem - a.mem);
-    const shown = showAll ? list.filter((x) => x.mem >= 1 || x.cpu > 0) : list.slice(0, 5);
-    const me = list.find((x) => x.me);
-    if (!showAll && me && !shown.includes(me)) shown.push(me); // (BelleCord itself is always on the list)
+    const shown = showAll ? list.filter((x) => x.mem >= 1 || x.e > 0) : list.slice(0, 5);
+    // (BelleCord is always on the list, and so are the Fluxer and Discord apps when they're open, to compare)
+    const keep = list.filter((x) => x.me || /\b(fluxer|discord)\b/i.test(x.name));
+    if (!showAll) for (const x of keep) if (!shown.includes(x)) shown.push(x);
     const max = Math.max(0.1, ...list.map(val));
     $("pf-sys").innerHTML = shown.map((x) =>
       '<span class="nm' + (x.me ? " me" : "") + '" title="' + esc(x.name) + (x.count > 1 ? " (" + x.count + " parts)" : "") + '">' + esc(x.name) + (x.count > 1 ? "<small>×" + x.count + "</small>" : "") + "</span>" +
-      '<div class="bar"><i style="width:' + Math.round((val(x) / max) * 100) + '%"></i></div><span class="num">' + mb(x.mem) + '</span><span class="num">' + (s.cpuReady ? x.cpu.toFixed(1) + "%" : "-") + "</span>").join("");
+      '<div class="bar"><i style="width:' + Math.round((val(x) / max) * 100) + '%"></i></div><span class="num">' + mb(x.mem) + '</span><span class="num">' + (s.cpuReady ? x.e.toFixed(1) + "%" : "-") + "</span>").join("");
     const bits = [];
     if (s.cpu != null) bits.push("CPU " + Math.round(s.cpu) + "%");
     if (s.mem) bits.push(mb(s.mem.used) + " of " + mb(s.mem.total) + " memory");
     $("pf-systot").textContent = bits.length ? "Whole computer: " + bits.join(", ") : "";
+    const fx = list.some((x) => !x.me && /\bfluxer\b/i.test(x.name)), dc = list.some((x) => !x.me && /\bdiscord\b/i.test(x.name));
+    $("pf-cmp").textContent = fx && dc ? "" : "Want to compare? Open the " + (!fx && !dc ? "Fluxer or Discord app" : !fx ? "Fluxer app" : "Discord app") + " and it shows up here next to BelleCord.";
   }
   async function system() {
     if (!visible() || sysBusy) return;
@@ -255,9 +275,9 @@
     sysBusy = true;
     try {
       const s = await host.perfSystem();
-      if (s && s.list) { lastSys = s; drawSys(); }
+      if (s && s.list) { lastSys = settle(s); drawSys(); }
       else if (!lastSys) $("pf-sys").innerHTML = '<span class="dim small" style="grid-column:1/-1">Couldn\'t read that this time. It tries again in a moment.</span>';
-    } catch {}
+    } catch { if (!lastSys) $("pf-sys").innerHTML = '<span class="dim small" style="grid-column:1/-1">Couldn\'t read that this time. Restarting BelleCord usually fixes it.</span>'; }
     sysBusy = false;
   }
   setInterval(usage, 2500);

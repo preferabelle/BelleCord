@@ -154,8 +154,8 @@ const sysTop = (() => {
     if (process.platform === "darwin") return null; // (macOS counts its file cache as used, so the number would look scary and mean little)
     return { used: (os.totalmem() - os.freemem()) / 1048576, total: os.totalmem() / 1048576 };
   }
-  // ownPids: this app's own processes (shown together as "BelleCord")
-  return async function top(ownPids) {
+  // ownPids: this app's own processes (shown together as "BelleCord"); ownNames: program names that are BelleCord too
+  return async function top(ownPids, ownNames) {
     const list = await sample();
     if (!list) return null;
     const now = Date.now(), wall = lastAt ? (now - lastAt) / 1000 : 0;
@@ -166,7 +166,7 @@ const sysTop = (() => {
       let cpu = 0;
       if (p.pct != null) cpu = p.pct;
       else { cur.set(p.pid, p.sec); const was = prev.get(p.pid); if (wall > 0 && was != null && p.sec >= was) cpu = (100 * (p.sec - was)) / (wall * cores); }
-      const me = ownPids && ownPids.has(p.pid);
+      const me = !!((ownPids && ownPids.has(p.pid)) || (ownNames && ownNames.test(p.name)));
       const key = me ? "\u0000me" : String(p.name).toLowerCase();
       const g = groups.get(key) || { key, raw: p.name, me, mem: 0, cpu: 0, count: 0 };
       g.mem += p.mem; g.cpu += cpu; g.count++;
@@ -184,7 +184,7 @@ const sysTop = (() => {
     return { list: out, cpu: cpuTotal(), mem: memUsed(), cpuReady: !first, cores };
   };
 })();
-ipcMain.handle("perf:system", async () => { try { return await sysTop(new Set(app.getAppMetrics().map((m) => m.pid))); } catch { return null; } });
+ipcMain.handle("perf:system", async () => { try { return await sysTop(new Set(app.getAppMetrics().map((m) => m.pid)), /^bellecord(\.exe)?$/i); } catch { return null; } });
 ipcMain.handle("prefs:set", (e, changes) => (changes && typeof changes === "object" ? writePrefs(changes) : readPrefs()));
 // pictures (skin pictures, wallpapers, banners): one small file each, next to the settings
 const imgDir = () => path.join(app.getPath("userData"), "pictures");
