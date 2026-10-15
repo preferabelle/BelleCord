@@ -348,6 +348,15 @@ const titleNumber = (t) => { const m = String(t || "").match(/Update (\d+)/i); r
 const tagNumber = (t) => { const m = String(t || "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : 0; };
 let found = null;
 async function getJson(url) { const r = await net.fetch(url, { headers: { "user-agent": "BelleCord", accept: "application/vnd.github+json" } }); if (!r.ok) throw new Error("GitHub said " + r.status); return r.json(); }
+// What's new (dashboard): every release's notes, from GitHub
+ipcMain.handle("whatsnew", async () => {
+  const u = updateInfo();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(u.repo)) return { list: [] };
+  try {
+    const all = await getJson("https://api.github.com/repos/" + u.repo + "/releases?per_page=100");
+    return { list: (Array.isArray(all) ? all : []).filter((r) => !r.draft).map((r) => ({ tag: r.tag_name, title: r.name || r.tag_name, notes: String(r.body || ""), at: r.published_at || r.created_at })) };
+  } catch (e) { return { list: [], error: String(e.message || e) }; }
+});
 ipcMain.handle("update:check", async () => {
   const u = updateInfo();
   if (!/^[\w.-]+\/[\w.-]+$/.test(u.repo)) return { available: false, version: u.version };

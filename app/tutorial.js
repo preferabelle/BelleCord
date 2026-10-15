@@ -1,4 +1,5 @@
-// The tutorial: BelleCord, played like a video game's first level. Each mission lights up one part of the app,
+// The tutorial: BelleCord, played like a video game's first level. The ones marked ⭐ Pro tip (in gold) are the
+// things worth knowing most. Finishing it unlocks the BelleCord Pilot badge (shell.js), which can be turned off. Each mission lights up one part of the app,
 // says what it does in a couple of lines, and gives XP. A few missions ask you to actually try the thing (they
 // finish by themselves when you do). Enter or → goes on, ← goes back, Esc skips. The 🎮 button in the title bar
 // plays it again any time, and so does "Play the tutorial" in App on the dashboard.
@@ -35,17 +36,23 @@
     { at: "#bcnav", title: "Time travel", xp: 25, skip: () => !$("bcnav"), text: () => "Back and forward, like a browser. Your mouse's side buttons work too, and so do <b>Alt+←</b> and <b>Alt+→</b>." },
     { at: "#r-dash", title: "Home base", xp: 50, text: () => "The dashboard (<b>" + key(4) + "</b>). Everything that's only in BelleCord lives here. Right-click it to change its picture.",
       try: { what: "Open the dashboard", done: () => body.dataset.mode === "dash" } },
+    { at: "#s-new", title: "What's new", xp: 25, skip: () => !$("s-new"), before: () => showSec("s-new"), text: () => "Everything that came in each update, newest first. A red <b>NEW</b> shows up here after an update." },
     { at: "#s-theme", title: "Theme studio", xp: 50, before: () => showSec("s-theme"), text: () => "Change how BelleCord, Fluxer and Discord look, all at the same time. Stuck? <b>🎲 Surprise me</b> picks a whole look at random." },
     { at: "#s-inbox", title: "Inbox", xp: 25, before: () => showSec("s-inbox"), text: () => "Mentions and replies from both sides land here, so nothing slips by." },
     { at: "#s-jump", title: "Jump in", xp: 25, before: () => showSec("s-jump"), text: () => "Voice channels with people in them right now. Click one to join." },
     { at: "#s-who", title: "Who's around", xp: 25, before: () => showSec("s-who"), text: () => "Who's online right now." },
     { at: "#s-cd", title: "Countdowns", xp: 25, before: () => showSec("s-cd"), text: () => "Birthdays, game launches, anything. They take turns in the title bar." },
-    { at: "#s-skins", title: "Skins", xp: 50, before: () => showSec("s-skins"), text: () => "Make your own look (a name, a color, a picture and a wallpaper) and wear one on each side." },
-    { at: "#s-badges", title: "Game badges", xp: 50, before: () => showSec("s-badges"), text: () => "Show your ranks next to your name. Overwatch, Minecraft, Roblox, Dota 2, the chess sites and more fill in from your real profile." },
+    { at: "#s-skins", title: "Skins", xp: 50, before: () => showSec("s-skins"), text: () => "A skin is your own look: a name, a color, a picture, a banner and a wallpaper. Press <b>+ New skin</b> to make one." },
+    { at: "#r-dash", tip: true, title: "Make the dashboard yours", xp: 100, before: () => showSec("s-skins"),
+      text: () => "A skin's <b>Picture</b> becomes your dashboard button (this one) and the big picture at the top of the dashboard. Its wallpaper and banner dress the whole app. <b>Right-click the dashboard button</b> to change the picture in one click." },
+    { at: "#s-skins", tip: true, title: "A different skin on each side", xp: 100, before: () => showSec("s-skins"),
+      text: () => "Make two skins, then press <b>Wear on Fluxer</b> on one and <b>Wear on Discord</b> on the other. Each side gets its own color, picture and wallpaper, and they swap as you switch sides." },
+    { at: "#s-badges", tip: true, title: "Game badges", xp: 100, before: () => showSec("s-badges"),
+      text: () => "Show off your ranks next to your name, on both Fluxer and Discord, for everyone using BelleCord. Overwatch, Minecraft, Roblox, Dota 2, the chess sites and more fill in from your <b>real profile</b>, so nobody can fake a rank. Click a game to add yours." },
     { at: "#s-perf", title: "Performance", xp: 50, skip: () => !$("s-perf"), before: () => showSec("s-perf"), text: () => "If your computer feels slow, pick <b>Light</b> or <b>Battery saver</b>. The numbers at the top show what BelleCord is using right now." },
     { at: "#s-app", title: "Settings", xp: 25, before: () => showSec("s-app"), text: () => "Your name, swapping the sides, animations and updates. If Fluxer ever won't load, <b>🔧 Fix Fluxer</b> is here too." },
     { at: "#tutbtn", title: "Replay", xp: 25, text: () => "This plays the tutorial again whenever you want." },
-    { title: "Mission complete", end: true, xp: 100, text: () => "That's everything. You're officially a BelleCord pilot." },
+    { title: "Mission complete", end: true, xp: 100, text: () => "That's everything. You're officially a BelleCord pilot, and you've got the badge to prove it." },
   ];
 
   // ---------------- the look ----------------
@@ -78,6 +85,13 @@
     "#bctut .conf{position:fixed;top:-10px;width:8px;height:14px;border-radius:2px;pointer-events:none;animation:bcTfall linear forwards}",
     "@keyframes bcTfall{to{transform:translateY(105vh) rotate(720deg)}}",
     "#bctut .card.bump{animation:bcTbump .35s ease-out}@keyframes bcTbump{0%{transform:scale(.96)}60%{transform:scale(1.02)}100%{transform:scale(1)}}",
+    "#bctut,#bctut *{-webkit-app-region:no-drag}",
+    "#bctut .top .x{all:unset;cursor:pointer;margin-left:6px;width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:#0005;color:#fff;font-size:12px}#bctut .top .x:hover{background:#0009}",
+    "#bctut .card.tip{border-color:#f0b232;box-shadow:0 0 0 2px #f0b23255,0 18px 50px rgba(0,0,0,.6),0 0 40px #f0b23233}",
+    "#bctut .card.tip .top{background:linear-gradient(90deg,#f0b232,#ff7ab6)}#bctut .card.tip .face{background:radial-gradient(circle at 30% 30%,#ffe08a,#f0b232 55%,#7a5208)}",
+    "#bctut .unlock{display:flex;gap:12px;align-items:center;text-align:left;margin:14px 0 4px;padding:10px 12px;border-radius:12px;background:linear-gradient(135deg,#e0301e33,#7c2bd933);border:1px solid #e0301e66}",
+    "#bctut .unlock .pb{flex:none;width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#ff6b5a,#e0301e 55%,#7a1208);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px #e0301e66}",
+    "#bctut .unlock small{display:block;font-size:10px;font-weight:800;letter-spacing:.12em;color:#ffd76a}#bctut .unlock b{display:block;font-size:15px}#bctut .unlock span{font-size:12px;color:#b5bac1}",
     "body[data-motion=off] #bctut *{animation:none!important;transition:none!important}",
     "#tuthint{position:fixed;top:40px;right:160px;z-index:9000;background:#1b1c22;border:1px solid #f0b23288;color:#ffd76a;border-radius:10px;padding:8px 12px;font-size:13px;box-shadow:0 8px 24px #0008;cursor:pointer}",
     "#tuthint::before{content:'';position:absolute;top:-6px;right:24px;width:10px;height:10px;background:#1b1c22;border-left:1px solid #f0b23288;border-top:1px solid #f0b23288;transform:rotate(45deg)}",
@@ -167,20 +181,25 @@
     const pct = Math.round((xp / Math.max(1, total())) * 100);
     if (m.end) {
       const all = total();
-      card.innerHTML = '<div class="top">🏁 Mission complete<span class="lv">' + n + " / " + n + '</span></div><div class="end"><div class="rank">🏆</div><h3>Rank: BelleCord Pilot</h3><p>' + m.text() + "</p></div>" +
+      const pilotSvg = window.bcGames && window.bcGames.icon ? window.bcGames.icon("pilot").replace(/width="15" height="15"/, 'width="40" height="40"') : "✈";
+      card.innerHTML = '<div class="top">🏁 Mission complete<span class="lv">' + n + " / " + n + '</span></div><div class="end"><div class="rank">🏆</div><h3>Rank: BelleCord Pilot</h3><p>' + m.text() + "</p>" +
+        '<div class="unlock"><span class="pb">' + pilotSvg + '</span><div><small>BADGE UNLOCKED</small><b>BelleCord Pilot</b><span>Other people using BelleCord see it next to your name. Turn it off any time in Game badges.</span></div></div></div>' +
         '<div class="xp"><i style="width:100%"></i></div><div class="xpline"><span>' + all + " XP</span><span>MAX</span></div>" +
         '<div class="btns"><button class="back">←</button><button class="next">Finish ▶</button></div>';
       confetti();
+      try { window.bcEarnPilot && window.bcEarnPilot(); } catch {}
     } else {
-      card.innerHTML = '<div class="top">' + (i === 0 ? "▶ Tutorial" : "Mission " + (level - 1)) + '<span class="lv">' + level + " / " + n + "</span></div>" +
-        '<div class="in"><div class="face">' + (i === 0 ? "👋" : "⭐") + "</div><div><h3>" + esc(m.title) + "</h3><p>" + m.text() + "</p></div></div>" +
+      card.innerHTML = '<div class="top">' + (i === 0 ? "▶ Tutorial" : m.tip ? "⭐ Pro tip" : "Mission " + (level - 1)) + '<span class="lv">' + level + " / " + n + '</span><button class="x" title="Skip the tutorial (Esc)" aria-label="Skip the tutorial">✕</button></div>' +
+        '<div class="in"><div class="face">' + (i === 0 ? "👋" : m.tip ? "💡" : "⭐") + "</div><div><h3>" + esc(m.title) + "</h3><p>" + m.text() + "</p></div></div>" +
         (m.try ? '<div class="quest" id="tq">🎯 <span>Try it: ' + esc(m.try.what) + "</span></div>" : "") +
         '<div class="xp"><i style="width:' + pct + '%"></i></div><div class="xpline"><span>' + xp + " XP</span><span>" + (m.xp ? "+" + m.xp + " XP for this one" : "Press Enter to start") + "</span></div>" +
         '<div class="btns">' + (i > 0 ? '<button class="back" title="Back (←)">←</button>' : "") + '<button class="skip" title="Esc">Skip tutorial</button><button class="next">' + (i === 0 ? "Start ▶" : "Next ▶") + "</button></div>";
     }
     const bk = card.querySelector(".back"); if (bk) bk.onclick = back;
-    const sk = card.querySelector(".skip"); if (sk) sk.onclick = () => stop();
+    // (Skip and ✕ act the moment they're pressed, so nothing else on the page can get in the way of the click)
+    card.querySelectorAll(".skip,.x").forEach((b) => { const quit = (e) => { e.preventDefault(); e.stopPropagation(); stop(); }; b.addEventListener("pointerdown", quit); b.onclick = quit; });
     card.querySelector(".next").onclick = next;
+    card.classList.toggle("tip", !!m.tip);
     card.classList.remove("bump"); void card.offsetWidth; card.classList.add("bump");
     // a little task: it finishes the mission by itself when you do it
     if (m.try) {

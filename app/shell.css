@@ -448,3 +448,10 @@ body[data-motion=ultra] .hero .heropic{transform:translate3d(calc(var(--hx) * .6
 body[data-motion=ultra] .hero .herotext{transform:translate3d(calc(var(--hx) * .3),calc(var(--hy) * .3),0)}
 .rip{position:absolute;border-radius:50%;pointer-events:none;background:color-mix(in srgb,var(--strong) 35%,transparent);transform:translate(-50%,-50%) scale(0);animation:bcRip 520ms var(--ease) forwards}
 @keyframes bcRip{to{transform:translate(-50%,-50%) scale(1);opacity:0}}
+
+/* the BelleCord Pilot badge: its card, and its row in Game badges */
+.pilotcard{position:relative;text-align:center;padding:26px 20px 20px;background:radial-gradient(circle at 50% 0%,#e0301e55,transparent 70%)}
+.pilotcard .gcx{position:absolute;right:10px;top:10px;background:transparent;color:var(--dim);padding:4px 8px}
+.pilotcard .pbig{width:86px;height:86px;margin:0 auto 10px;border-radius:22px;background:linear-gradient(135deg,#ff6b5a,#e0301e 55%,#7a1208);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px #e0301e66}
+.pilotcard h2{margin:6px 0;color:#fff}.pilotcard p{color:#b5bac1;margin:0 0 12px}
+.gbpilot{display:flex;align-items:center;gap:12px;margin:10px 0}.gbpilot>div{flex:1}.gbpilot .gb{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:none}.gbpilot .gb.locked{background:var(--raised);font-size:14px}

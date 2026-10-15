@@ -635,7 +635,12 @@
   setTimeout(sayHello, 15000);
   const people2 = new Map(); // "fluxer:id" -> person or null (fetched this session)
   const asking = new Set(); let askTimer = null;
-  const badgeList = (person) => (person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : []);
+  const badgeList = (person) => {
+    const out = person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : [];
+    // (the BelleCord Pilot badge, for finishing the tutorial, goes first)
+    if (person && person.pilot && G.PILOT) out.unshift({ key: "pilot", glyph: G.PILOT.glyph, color: G.PILOT.color, name: G.PILOT.name, svg: G.icon("pilot") });
+    return out;
+  };
   function rememberPerson(k, person) {
     people2.set(k, person);
     const bc = { ...P("badgeCache") };
@@ -839,6 +844,7 @@
   const cardEsc = esc;
   async function openCard(key, gameKey, liveFresh) {
     const person = key === "me" ? myPerson() : people2.has(key) ? people2.get(key) : P("badgeCache")[key];
+    if (gameKey === "pilot") return pilotCard(person, key === "me");
     if (!person || !person.games) return;
     const game = G.BY[gameKey] || G.BY[Object.keys(person.games)[0]];
     const g = person.games[game.key];
@@ -895,7 +901,26 @@
   }
   $("gcard").addEventListener("click", (e) => { if (e.target === $("gcard")) $("gcard").hidden = true; });
   const isMine = (k) => { const me = P("me"); return SIDES.some((s2) => me[s2] && k === s2 + ":" + me[s2].id); };
-  function myPerson() { return { name: P("myName"), avatar: (P("me").fluxer || P("me").discord || {}).avatar || "", games: (P("myBadges") || {}).games || {} }; }
+  function myPerson() { return { name: P("myName"), avatar: (P("me").fluxer || P("me").discord || {}).avatar || "", games: (P("myBadges") || {}).games || {}, pilot: !!P("pilotEarned") && P("pilotBadge") !== false }; }
+  // the BelleCord Pilot badge's card
+  function pilotCard(person, mine) {
+    const box = $("gcard").querySelector(".gcbox");
+    box.style.setProperty("--gc", "#e0301e");
+    box.innerHTML = '<div class="pilotcard"><button id="gc-x" class="gcx" title="Close">✕</button><div class="pbig">' + G.icon("pilot").replace(/width="15" height="15"/, 'width="54" height="54"') + "</div><h2>BelleCord Pilot</h2><p>" +
+      (mine ? "You earned this by finishing the tutorial. Other people using BelleCord see it next to your name." : esc((person && person.name) || "They") + " finished the BelleCord tutorial.") + "</p>" +
+      (mine ? '<label class="keep"><input type="checkbox" id="gc-pilot"' + (P("pilotBadge") !== false ? " checked" : "") + "> Show it on my profile</label>" : "") + "</div>";
+    $("gcard").hidden = false;
+    box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
+    const t = box.querySelector("#gc-pilot"); if (t) t.onchange = () => setPilot(t.checked);
+  }
+  async function setPilot(on) {
+    await save({ pilotBadge: !!on });
+    paintBadges();
+    if (P("hubKey")) sendBadges(true);
+    toast(on ? "Your BelleCord Pilot badge is on." : "Your BelleCord Pilot badge is off. Turn it back on any time in Game badges.");
+  }
+  // (the tutorial calls this when you finish it)
+  window.bcEarnPilot = async () => { const first = !P("pilotEarned"); await save({ pilotEarned: true, ...(first ? { pilotBadge: true } : {}) }); paintBadges(); if (P("hubKey")) sendBadges(true); return first; };
 
   // what an account name looks like for the games whose live stats need it exactly right
   const HANDLE_OK = {
@@ -911,6 +936,13 @@
     const mine = myPerson().games;
     setHtml($("gb-mine"), badgeList(myPerson()).map((b) => '<button class="mine" data-g="' + b.key + '"><span class="gb" style="background:' + b.color + '">' + (G.icon(b.key) || esc(b.glyph)) + "</span>" + esc(b.name) + "</button>").join(""));
     $("gb-mine").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openCard("me", b.dataset.g)));
+    // the Pilot badge: earned in the tutorial, on or off here
+    let pr = $("gb-pilot");
+    if (!pr) { pr = document.createElement("div"); pr.id = "gb-pilot"; pr.className = "card gbpilot"; $("gb-mine").after(pr); }
+    setHtml(pr, P("pilotEarned")
+      ? '<span class="gb" style="background:#e0301e">' + G.icon("pilot") + '</span><div><b>BelleCord Pilot</b><div class="dim small">Earned by finishing the tutorial. Other people using BelleCord see it next to your name' + (P("hubKey") ? "" : " once your game badges are set up") + '.</div></div><label class="keep"><input type="checkbox" id="gb-pilot-on"' + (P("pilotBadge") !== false ? " checked" : "") + "> Show it</label>"
+      : '<span class="gb locked">🔒</span><div><b>BelleCord Pilot</b><div class="dim small">A badge for finishing the tutorial. Press 🎮 at the top to play it.</div></div>');
+    const pt = $("gb-pilot-on"); if (pt) pt.onchange = () => setPilot(pt.checked);
     setHtml($("gb-games"), G.GAMES.map((g) => '<button data-g="' + g.key + '" class="' + (mine[g.key] ? "has" : "") + (editing === g.key ? " on" : "") + '"><span class="gb" style="background:' + g.color + '">' + (G.icon(g.key) || esc(g.glyph)) + "</span>" + esc(g.name) + (mine[g.key] ? " ✓" : "") + "</button>").join(""));
     $("gb-games").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => (editing === b.dataset.g ? closeEdit() : editGame(b.dataset.g))));
   }
@@ -997,7 +1029,7 @@
       const me = P("me"), ids = {}; for (const s2 of SIDES) if (me[s2] && me[s2].id) ids[s2] = me[s2].id;
       if (!Object.keys(ids).length) return { ok: false, error: "Open Fluxer or Discord first" };
       const av = [me.fluxer, me.discord].map((x) => x && x.avatar).find((a) => /^https:\/\//.test(a || "")) || "";
-      const r = await hub("POST", "/v1/save", { key: P("hubKey") || undefined, ids, codes: codes || undefined, name: P("myName"), avatar: av, games: myPerson().games });
+      const r = await hub("POST", "/v1/save", { key: P("hubKey") || undefined, ids, codes: codes || undefined, name: P("myName"), avatar: av, games: myPerson().games, pilot: myPerson().pilot });
       if (r.ok) {
         const ch = { badgesDirty: false }; if (r.data.key) ch.hubKey = r.data.key; await save(ch);
         for (const s2 of Object.keys(ids)) { const k = s2 + ":" + ids[s2]; rememberPerson(k, r.data.person); try { $("wv-" + s2).executeJavaScript("window.__bcGBforget && window.__bcGBforget(" + JSON.stringify(k) + ");1").catch(() => {}); } catch {} }

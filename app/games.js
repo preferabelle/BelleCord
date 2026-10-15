@@ -71,8 +71,11 @@
     lichess: S('<path d="M6 3.5h2.5v2h2.5v-2h2v2h2.5v-2H18V9l-2 1.5V17H8v-6.5L6 9z"/><path d="M5 20.5h14"/>'), // rook
     roblox: S('<rect x="3" y="12" width="9" height="8" rx="1"/><rect x="12" y="12" width="9" height="8" rx="1"/><rect x="7.5" y="4" width="9" height="8" rx="1"/><circle cx="7.5" cy="16" r="1" fill="#fff"/><circle cx="16.5" cy="16" r="1" fill="#fff"/><circle cx="12" cy="8" r="1" fill="#fff"/>'), // stacked bricks
   };
+  // (not a game: the badge you earn by finishing the tutorial)
+  ICONS.pilot = S('<path d="M2.5 13.5 21 6l-4.5 13-4-5.5z" fill="#fff"/><path d="M12.5 13.5 21 6"/><path d="M12.5 13.5v5l2.5-2.5"/>');
+  const PILOT = { key: "pilot", name: "BelleCord Pilot", glyph: "BC", color: "#e0301e" };
   const icon = (key) => ICONS[key] || "";
 
   const BY = Object.fromEntries(GAMES.map((g) => [g.key, g]));
-  window.bcGames = { GAMES, BY, icon };
+  window.bcGames = { GAMES, BY, icon, PILOT };
 })();

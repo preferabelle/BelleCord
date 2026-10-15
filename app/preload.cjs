@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("bcApp", {
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
   hub: (method, route, payload) => ipcRenderer.invoke("hub", method, route, payload),
   checkUpdate: () => ipcRenderer.invoke("update:check"),
+  whatsNew: () => ipcRenderer.invoke("whatsnew"),
   applyUpdate: () => ipcRenderer.invoke("update:apply"),
   // Fix Fluxer (one button for whatever keeps Fluxer from working)
   fixFluxer: () => ipcRenderer.invoke("fluxer:fix"),

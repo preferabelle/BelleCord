@@ -16,7 +16,9 @@ HOW TO START IT
 When there's a new version, an Update button shows up at the top of the app. Click it and it restarts updated.
 
 WHAT'S IN IT
-- New to it? Press the 🎮 at the top for a quick tutorial. It walks you through everything.
+- New to it? Press the 🎮 at the top for a quick tutorial. It walks you through everything, and finishing it
+  gets you the BelleCord Pilot badge (turn it off in Game badges if you don't want it).
+- What's new: the top of the dashboard shows what came in every update.
 - Fluxer servers on the left, Discord servers on the right.
 - Top left: the dashboard (right-click to change its picture). Top right: your DMs.
 - Ctrl+1 Fluxer, Ctrl+2 Discord, Ctrl+3 both, Ctrl+4 dashboard (Cmd on Mac).
