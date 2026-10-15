@@ -66,6 +66,125 @@ ipcMain.handle("perf:clean", async () => {
   for (const p of PARTS) { try { const ses = session.fromPartition(p); freed += await ses.getCacheSize(); await ses.clearCache(); await ses.clearCodeCaches({}).catch(() => {}); } catch {} }
   return { mb: Math.round(freed / 1048576) };
 });
+// ---- Performance > "On your computer": every program running on the computer, grouped by name (all of Chrome's
+// processes are one "Chrome"), with its memory and CPU. Only asked for while that part of the dashboard is on screen.
+// Windows: one small hidden PowerShell that stays open while it's being asked (starting one every time costs more)
+// and closes after 20 seconds of nobody looking. Mac and Linux: "ps".
+const sysTop = (() => {
+  const os = require("os");
+  const cp = require("child_process");
+  const WIN = process.platform === "win32", LINUX = process.platform === "linux";
+  const cores = Math.max(1, os.cpus().length);
+  let ps = null, buf = "", waiting = null, idleT = null, chain = Promise.resolve();
+  let lastCpu = new Map(), lastAt = 0, lastTimes = null;
+  const names = new Map(); // (Windows: "chrome" -> "Google Chrome", from the program's own description)
+  const SCRIPT = [
+    "$ErrorActionPreference='SilentlyContinue'",
+    "$ic=[Globalization.CultureInfo]::InvariantCulture",
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8",
+    "while($true){",
+    " $l=[Console]::In.ReadLine(); if($l -eq $null){break}",
+    " $sb=New-Object Text.StringBuilder",
+    " if($l.StartsWith('D ')){",
+    "  foreach($n in $l.Substring(2).Split('|')){ $d=''; try{ $d=(Get-Process -Name $n | Where-Object { $_.Description } | Select-Object -First 1).Description }catch{}; [void]$sb.Append($n).Append('|').Append($d).Append(\"`n\") }",
+    " } else {",
+    "  foreach($p in [Diagnostics.Process]::GetProcesses()){ $c=0.0; try{ $c=$p.TotalProcessorTime.TotalSeconds }catch{}; $m=0; try{ $m=$p.WorkingSet64 }catch{}",
+    "   [void]$sb.Append($p.Id).Append('|').Append($p.ProcessName).Append('|').Append($c.ToString('0.000',$ic)).Append('|').Append($m).Append(\"`n\") }",
+    " }",
+    " [Console]::Out.Write($sb.ToString()); [Console]::Out.WriteLine('END')",
+    "}",
+  ].join("\n");
+  function start() {
+    try {
+      ps = cp.spawn("powershell.exe", ["-NoProfile", "-NoLogo", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(SCRIPT, "utf16le").toString("base64")], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+      ps.stdout.setEncoding("utf8");
+      ps.stdout.on("data", (d) => {
+        buf += d;
+        const m = buf.match(/(^|\n)END\r?\n/);
+        if (m && waiting) { const out = buf.slice(0, m.index); buf = buf.slice(m.index + m[0].length); const w = waiting; waiting = null; w(out); }
+      });
+      ps.on("exit", () => { ps = null; if (waiting) { const w = waiting; waiting = null; w(null); } });
+      ps.on("error", () => {});
+    } catch { ps = null; }
+  }
+  function ask(line) {
+    chain = chain.then(() => new Promise((resolve) => {
+      if (!ps) start();
+      if (!ps) return resolve(null);
+      clearTimeout(idleT);
+      idleT = setTimeout(() => { try { ps && ps.kill(); } catch {} ps = null; }, 20000);
+      const t = setTimeout(() => { if (waiting) { waiting = null; try { ps && ps.kill(); } catch {} ps = null; resolve(null); } }, 10000);
+      buf = "";
+      waiting = (out) => { clearTimeout(t); resolve(out); };
+      try { ps.stdin.write(line + "\n"); } catch { waiting = null; clearTimeout(t); resolve(null); }
+    }));
+    return chain;
+  }
+  const run = (cmd, args) => new Promise((resolve) => { try { cp.execFile(cmd, args, { maxBuffer: 8 << 20, windowsHide: true }, (e, out) => resolve(e ? null : String(out))); } catch { resolve(null); } });
+  // [{pid, name, sec (CPU seconds so far) or pct, mem (MB)}]
+  async function sample() {
+    if (WIN) {
+      const out = await ask("S");
+      if (!out) return null;
+      return out.split(/\r?\n/).map((l) => l.split("|")).filter((a) => a.length >= 4).map((a) => ({ pid: Number(a[0]), name: a[1], sec: Number(String(a[2]).replace(",", ".")) || 0, mem: (Number(a[3]) || 0) / 1048576 }));
+    }
+    if (LINUX) {
+      const out = await run("ps", ["-A", "-o", "pid=,rss=,times=,comm="]);
+      if (!out) return null;
+      return out.split("\n").map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/)).filter(Boolean).map((m) => ({ pid: Number(m[1]), mem: Number(m[2]) / 1024, sec: Number(m[3]), name: m[4] }));
+    }
+    const out = await run("ps", ["-A", "-o", "pid=,pcpu=,rss=,comm="]);
+    if (!out) return null;
+    return out.split("\n").map((l) => l.trim().match(/^(\d+)\s+([\d.,]+)\s+(\d+)\s+(.+)$/)).filter(Boolean).map((m) => {
+      const full = m[4], app = full.match(/\/([^/]+)\.app\//);
+      return { pid: Number(m[1]), pct: Number(m[2].replace(",", ".")) / cores, mem: Number(m[3]) / 1024, name: app ? app[1] : full.split("/").pop() };
+    });
+  }
+  const pretty = (n) => { const s = String(n).replace(/\.exe$/i, ""); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const SKIP = /^(idle|system idle process|_total)$/i;
+  function cpuTotal() {
+    let idle = 0, total = 0;
+    for (const c of os.cpus()) { for (const k in c.times) total += c.times[k]; idle += c.times.idle; }
+    const prev = lastTimes; lastTimes = { idle, total };
+    if (!prev || total <= prev.total) return null;
+    return Math.max(0, Math.min(100, 100 * (1 - (idle - prev.idle) / (total - prev.total))));
+  }
+  function memUsed() {
+    if (LINUX) { try { const t = require("fs").readFileSync("/proc/meminfo", "utf8"); const g = (k) => Number((t.match(new RegExp(k + ":\\s+(\\d+)")) || [])[1] || 0) / 1024; return { used: g("MemTotal") - g("MemAvailable"), total: g("MemTotal") }; } catch {} }
+    if (process.platform === "darwin") return null; // (macOS counts its file cache as used, so the number would look scary and mean little)
+    return { used: (os.totalmem() - os.freemem()) / 1048576, total: os.totalmem() / 1048576 };
+  }
+  // ownPids: this app's own processes (shown together as "BelleCord")
+  return async function top(ownPids) {
+    const list = await sample();
+    if (!list) return null;
+    const now = Date.now(), wall = lastAt ? (now - lastAt) / 1000 : 0;
+    const prev = lastCpu, cur = new Map();
+    const groups = new Map();
+    for (const p of list) {
+      if (SKIP.test(p.name) || p.pid === 0) continue;
+      let cpu = 0;
+      if (p.pct != null) cpu = p.pct;
+      else { cur.set(p.pid, p.sec); const was = prev.get(p.pid); if (wall > 0 && was != null && p.sec >= was) cpu = (100 * (p.sec - was)) / (wall * cores); }
+      const me = ownPids && ownPids.has(p.pid);
+      const key = me ? "\u0000me" : String(p.name).toLowerCase();
+      const g = groups.get(key) || { key, raw: p.name, me, mem: 0, cpu: 0, count: 0 };
+      g.mem += p.mem; g.cpu += cpu; g.count++;
+      groups.set(key, g);
+    }
+    const first = !lastAt && list.some((p) => p.pct == null);
+    lastCpu = cur; lastAt = now;
+    const all = [...groups.values()];
+    // nicer names for the biggest ones (Windows knows "Google Chrome" for "chrome"); asked in the background
+    if (WIN) {
+      const want = all.sort((a, b) => b.mem - a.mem).slice(0, 25).filter((g) => !g.me && !names.has(g.raw.toLowerCase())).map((g) => g.raw);
+      if (want.length) { for (const n of want) names.set(n.toLowerCase(), ""); ask("D " + want.join("|")).then((out) => { for (const l of String(out || "").split(/\r?\n/)) { const [n, d] = l.split("|"); if (n && d && d.trim()) names.set(n.toLowerCase(), d.trim()); } }); }
+    }
+    const out = all.map((g) => ({ name: g.me ? "BelleCord" : names.get(g.raw.toLowerCase()) || pretty(g.raw), mem: Math.round(g.mem), cpu: Math.round(g.cpu * 10) / 10, count: g.count, me: g.me }));
+    return { list: out, cpu: cpuTotal(), mem: memUsed(), cpuReady: !first, cores };
+  };
+})();
+ipcMain.handle("perf:system", async () => { try { return await sysTop(new Set(app.getAppMetrics().map((m) => m.pid))); } catch { return null; } });
 ipcMain.handle("prefs:set", (e, changes) => (changes && typeof changes === "object" ? writePrefs(changes) : readPrefs()));
 // pictures (skin pictures, wallpapers, banners): one small file each, next to the settings
 const imgDir = () => path.join(app.getPath("userData"), "pictures");

@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("bcApp", {
   perfUsage: () => ipcRenderer.invoke("perf:usage"),
   perfSpell: (on) => ipcRenderer.invoke("perf:spell", !!on),
   perfClean: () => ipcRenderer.invoke("perf:clean"),
+  perfSystem: () => ipcRenderer.invoke("perf:system"),
   onFluxerProgress: (fn) => ipcRenderer.on("fluxer-progress", (e, step) => { try { fn(step); } catch (x) {} }),
   setTitleBar: (color, symbol) => ipcRenderer.invoke("titlebar", { color, symbol }),
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),
