@@ -455,3 +455,4 @@ body[data-motion=ultra] .hero .herotext{transform:translate3d(calc(var(--hx) * .
 .pilotcard .pbig{width:86px;height:86px;margin:0 auto 10px;border-radius:22px;background:linear-gradient(135deg,#ff6b5a,#e0301e 55%,#7a1208);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px #e0301e66}
 .pilotcard h2{margin:6px 0;color:#fff}.pilotcard p{color:#b5bac1;margin:0 0 12px}
 .gbpilot{display:flex;align-items:center;gap:12px;margin:10px 0}.gbpilot>div{flex:1}.gbpilot .gb{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:none}.gbpilot .gb.locked{background:var(--raised);font-size:14px}
+.ownercard{background:radial-gradient(circle at 50% 0%,#d4a01755,transparent 70%)}.ownercard .pbig{background:linear-gradient(135deg,#ffe08a,#d4a017 55%,#6b4e05);box-shadow:0 8px 30px #d4a01766}

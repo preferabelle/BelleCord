@@ -639,6 +639,8 @@
     const out = person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : [];
     // (the BelleCord Pilot badge, for finishing the tutorial, goes first)
     if (person && person.pilot && G.PILOT) out.unshift({ key: "pilot", glyph: G.PILOT.glyph, color: G.PILOT.color, name: G.PILOT.name, svg: G.icon("pilot") });
+    // (and the Owner badge, mine only, before everything)
+    if (person && person.owner && G.OWNER) out.unshift({ key: "owner", glyph: G.OWNER.glyph, color: G.OWNER.color, name: G.OWNER.name, svg: G.icon("owner") });
     return out;
   };
   function rememberPerson(k, person) {
@@ -845,6 +847,7 @@
   async function openCard(key, gameKey, liveFresh) {
     const person = key === "me" ? myPerson() : people2.has(key) ? people2.get(key) : P("badgeCache")[key];
     if (gameKey === "pilot") return pilotCard(person, key === "me");
+    if (gameKey === "owner") return ownerCard(person);
     if (!person || !person.games) return;
     const game = G.BY[gameKey] || G.BY[Object.keys(person.games)[0]];
     const g = person.games[game.key];
@@ -912,6 +915,14 @@
     $("gcard").hidden = false;
     box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
     const t = box.querySelector("#gc-pilot"); if (t) t.onchange = () => setPilot(t.checked);
+  }
+  // the Owner badge's card (it's only ever on mine)
+  function ownerCard(person) {
+    const box = $("gcard").querySelector(".gcbox");
+    box.style.setProperty("--gc", "#d4a017");
+    box.innerHTML = '<div class="pilotcard ownercard"><button id="gc-x" class="gcx" title="Close">✕</button><div class="pbig">' + G.icon("owner").replace(/width="15" height="15"/, 'width="54" height="54"') + "</div><h2>Owner</h2><p>" + esc((person && person.name) || "Belle") + " made BelleCord.</p></div>";
+    $("gcard").hidden = false;
+    box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
   }
   async function setPilot(on) {
     await save({ pilotBadge: !!on });

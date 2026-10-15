@@ -74,8 +74,11 @@
   // (not a game: the badge you earn by finishing the tutorial)
   ICONS.pilot = S('<path d="M2.5 13.5 21 6l-4.5 13-4-5.5z" fill="#fff"/><path d="M12.5 13.5 21 6"/><path d="M12.5 13.5v5l2.5-2.5"/>');
   const PILOT = { key: "pilot", name: "BelleCord Pilot", glyph: "BC", color: "#e0301e" };
+  // (not a game either: mine, the one who made BelleCord. A key with a heart for its bow.)
+  ICONS.owner = S('<path d="M12 11.6c-2.4-1.5-5.4-3.5-5.4-6.2a2.8 2.8 0 0 1 5.4-1.3 2.8 2.8 0 0 1 5.4 1.3c0 2.7-3 4.7-5.4 6.2z" fill="#fff"/><path d="M12 11.5v10"/><path d="M12 16.6h3.6M12 19.8h2.6"/>');
+  const OWNER = { key: "owner", name: "Owner", glyph: "OWN", color: "#d4a017" };
   const icon = (key) => ICONS[key] || "";
 
   const BY = Object.fromEntries(GAMES.map((g) => [g.key, g]));
-  window.bcGames = { GAMES, BY, icon, PILOT };
+  window.bcGames = { GAMES, BY, icon, PILOT, OWNER };
 })();
