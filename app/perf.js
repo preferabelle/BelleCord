@@ -1,7 +1,7 @@
 // Performance, on the dashboard: what BelleCord is using right now (Fluxer, Discord, the app itself, the graphics
 // card), everything else running on your computer, one-click presets, and the switches behind them:
 //   * pause the side you're not looking at (its animations stop and its videos pause; messages still come in)
-//   * let the hidden side sleep (after 5 minutes out of sight it shuts down completely, and wakes when you go back)
+//   * let the hidden side sleep (after a minute out of sight it shuts down completely, and wakes when you go back)
 //   * still sites (Fluxer's and Discord's animations and moving backgrounds stop)
 //   * no wallpaper blur (blur is the heaviest thing a theme does)
 //   * star effects (effects.js)
@@ -25,7 +25,7 @@
   // ---------------- the switches ----------------
   const OPTS = [
     { k: "pauseHidden", d: true, name: "Pause the side you're not looking at", note: "Its animations stop and its videos pause while it's out of sight. Messages and notifications still come in." },
-    { k: "sleepHidden", d: false, name: "Let the hidden side sleep", note: "After 5 minutes out of sight it shuts down completely, and it wakes up when you go back (a few seconds). Never while you're in a call or watching a stream. Its notifications stop while it sleeps." },
+    { k: "sleepHidden", d: false, name: "Let the hidden side sleep", note: "After a minute out of sight it shuts down completely and lets go of all its memory, and it wakes up when you go back (a few seconds). Never while you're in a call or watching a stream. Its notifications stop while it sleeps." },
     { k: "stillSites", d: false, name: "Still Fluxer and Discord", note: "Their animations and moving theme backgrounds stop. Everything still opens and works." },
     { k: "noBlur", d: false, name: "No wallpaper blur", note: "Blur is the heaviest thing a theme does. The wallpaper stays, just sharp." },
     { k: "starFx", d: true, name: "Star effects", note: "Glowing, sparkling ⭐ reactions and the \"+1 → 💗\" tags." },
@@ -109,7 +109,7 @@
   }
   async function maybeSleep(side) {
     const s = st[side];
-    if (s.asleep || s.busy || !opt("sleepHidden") || seen(side) || !s.since || Date.now() - s.since < 5 * 60000) return;
+    if (s.asleep || s.busy || !opt("sleepHidden") || seen(side) || !s.since || Date.now() - s.since < 60000) return;
     if (!/^https?:/i.test(urlOf(side))) return;
     s.busy = true;
     const busy = await run(side, "(" + busyCheck.toString() + ")()");
@@ -174,7 +174,7 @@
   const sec = document.createElement("section");
   sec.className = "sec"; sec.id = "s-perf";
   sec.innerHTML = '<h2>Performance</h2>' +
-    '<div class="card"><div class="big"><div><b id="pf-cpu">-</b><span>CPU</span></div><div><b id="pf-mem">-</b><span>memory</span></div><div class="dim small" id="pf-gpu"></div><span class="sp"></span><span class="sorts"><button data-pfsort="cpu" class="on" title="Most energy first (how hard each one makes the computer work)">Energy use</button><button data-pfsort="mem">Memory</button><button id="pf-all">Show all</button></span></div>' +
+    '<div class="card"><div class="big"><div><b id="pf-cpu">-</b><span>CPU</span></div><div><b id="pf-mem">-</b><span>memory</span></div><div class="dim small" id="pf-gpu"></div><span class="sp"></span><span class="sorts"><button data-pfsort="mem" class="on" title="Most memory first">Memory</button><button data-pfsort="cpu" title="Most energy first (how hard each one makes the computer work; matters most on a laptop)">Energy use</button><button id="pf-all">Show all</button></span></div>' +
     '<div class="usage" id="pf-parts"></div><div class="dim small" id="pf-foot" style="margin-top:8px"></div></div>' +
     '<h3 class="sub">Presets</h3><div class="presets" id="pf-presets"></div>' +
     '<div class="card opts" id="pf-opts"></div>' +
@@ -219,14 +219,14 @@
   new MutationObserver(() => { if ($("pf-presets")) drawPresets(); }).observe(body, { attributes: true, attributeFilter: ["data-motion"] });
 
   // ---------------- the numbers (only while you can see them) ----------------
-  // One list with bars: the 5 programs on the computer using the most energy (or memory), BelleCord always in it, and
+  // One list with bars: the 5 programs on the computer using the most memory (or energy), BelleCord always in it, and
   // the Fluxer and Discord apps too when they're open (to compare). Under BelleCord: what's inside it.
   // The big numbers at the top are BelleCord's own.
   const PART = { fluxer: "Fluxer inside it", discord: "Discord inside it", app: "its own parts", gpu: "drawing the screen", links: "quick links" };
   const TIP = { app: "The dashboard, the title bar and everything else BelleCord shows", gpu: "Drawing the screen: the part that draws BelleCord on your screen (with the graphics card, if it's on). Every app has one, Fluxer and Discord too.", links: "TikTok, Pinterest and X in the title bar" };
   const mb = (n) => (n >= 1024 ? (n / 1024).toFixed(1) + " GB" : Math.round(n) + " MB");
   const visible = () => { if (body.dataset.mode !== "dash") return false; const r = sec.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
-  let sortBy = "cpu", showAll = false, sysBusy = false, lastSys = null, lastUse = null, sysWhy = "", sysTries = 0;
+  let sortBy = "mem", showAll = false, sysBusy = false, lastSys = null, lastUse = null, sysWhy = "", sysTries = 0;
   const smooth = new Map(); // (energy use, evened out over the last few looks so the list doesn't jump around)
   function settle(s) {
     const seen = new Set();
@@ -259,7 +259,7 @@
       }).join("");
       const fx = list.some((x) => !x.me && /\bfluxer\b/i.test(x.name)), dc = list.some((x) => !x.me && /\bdiscord\b/i.test(x.name));
       if (!fx || !dc) notes.push("To compare, open the " + (!fx && !dc ? "Fluxer or Discord app" : !fx ? "Fluxer app" : "Discord app") + " and it shows up here next to BelleCord.");
-      if (!s.cpuReady && s.why) notes.push("Energy use can't be read right now, so this is by memory.");
+      if (!s.cpuReady && sortBy === "cpu") notes.push("Energy use can't be read right now, so this is by memory.");
       const bits = [];
       if (s.cpu != null) bits.push("CPU " + Math.round(s.cpu) + "%");
       if (s.mem) bits.push(mb(s.mem.used) + " of " + mb(s.mem.total) + " memory");
@@ -271,7 +271,8 @@
       $("pf-parts").innerHTML = parts.map(([k, p]) => row(esc((PART[k] || k).replace(/^./, (c) => c.toUpperCase())) + (sleeping.includes(k) ? " (asleep)" : ""), TIP[k], "", (p.mem / max) * 100, p.mem, p.cpu.toFixed(1) + "%")).join("");
       notes.push(sysTries < 2 ? "Reading the rest of your computer..." : "Couldn't read the rest of your computer this time. It keeps trying.");
     }
-    $("pf-foot").innerHTML = notes.map(esc).join(" ") + (!(s && s.list) && sysWhy && sysTries >= 2 ? ' <span title="' + esc(sysWhy) + '" style="text-decoration:underline dotted;cursor:help">Details</span>' : "");
+    const whyNow = (s && s.list) ? (s.cpuReady ? "" : s.why || "") : sysTries >= 2 ? sysWhy : "";
+    $("pf-foot").innerHTML = notes.map(esc).join(" ") + (whyNow && (!(s && s.list) || sortBy === "cpu") ? ' <span title="' + esc(whyNow) + '" style="text-decoration:underline dotted;cursor:help">Details</span>' : "");
   }
   async function usage() {
     if (!visible() || !host.perfUsage) return;
@@ -294,13 +295,15 @@
     sysBusy = false;
   }
   setInterval(usage, 2500);
+  // Battery saver: every 5 minutes, the pictures the app keeps decoded in memory are let go (same as part of Clean up)
+  setInterval(() => { const p = current(); if (p && p.id === "saver" && host.freeMemory) host.freeMemory(); }, 5 * 60000);
   setInterval(system, 3000);
   sec.querySelectorAll("[data-pfsort]").forEach((b) => (b.onclick = () => { sortBy = b.dataset.pfsort; sec.querySelectorAll("[data-pfsort]").forEach((x) => x.classList.toggle("on", x === b)); draw(); }));
   $("pf-all").onclick = (e) => { showAll = !showAll; e.target.textContent = showAll ? "Top 5" : "Show all"; $("pf-parts").classList.toggle("all", showAll); draw(); };
 
   $("pf-clean").onclick = async () => {
     $("pf-msg").textContent = "Cleaning...";
-    try { const r = await host.perfClean(); $("pf-msg").textContent = r && r.mb ? "Freed " + r.mb + " MB. You're still signed in." : "All clean. You're still signed in."; } catch { $("pf-msg").textContent = "That didn't work this time."; }
+    try { if (host.freeMemory) host.freeMemory(); const r = await host.perfClean(); $("pf-msg").textContent = r && r.mb ? "Freed " + r.mb + " MB. You're still signed in." : "All clean. You're still signed in."; } catch { $("pf-msg").textContent = "That didn't work this time."; }
   };
   $("pf-reload").onclick = () => {
     const m = body.dataset.mode;

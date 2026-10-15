@@ -1,5 +1,5 @@
 // The app's own page gets exactly these few things from the app, nothing more.
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webFrame } = require("electron");
 contextBridge.exposeInMainWorld("bcApp", {
   platform: process.platform,
   getPrefs: () => ipcRenderer.invoke("prefs:get"),
@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("bcApp", {
   perfSpell: (on) => ipcRenderer.invoke("perf:spell", !!on),
   perfClean: () => ipcRenderer.invoke("perf:clean"),
   perfSystem: () => ipcRenderer.invoke("perf:system"),
+  freeMemory: () => { try { webFrame.clearCache(); return true; } catch (e) { return false; } },
   onFluxerProgress: (fn) => ipcRenderer.on("fluxer-progress", (e, step) => { try { fn(step); } catch (x) {} }),
   setTitleBar: (color, symbol) => ipcRenderer.invoke("titlebar", { color, symbol }),
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),
