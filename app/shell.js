@@ -1149,6 +1149,7 @@
   // ---------------- start ----------------
   (async () => {
     try { prefs = (await host.getPrefs()) || {}; } catch { prefs = {}; }
+    window.bcPrefsReady = true; // (perf.js, effects.js and tutorial.js wait for this)
     if (prefs.mode === "home") prefs.mode = "fluxer";
     if (!prefs.theme) prefs.theme = { ...T.DEFAULT_STACK };
     if (prefs.fxColors && typeof prefs.fxColors === "object" && prefs.fxColors.chat) fxColors = prefs.fxColors;

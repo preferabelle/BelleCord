@@ -42,6 +42,30 @@ function writePrefs(changes) {
   return prefs;
 }
 ipcMain.handle("prefs:get", () => readPrefs());
+// ---- Performance (dashboard): what BelleCord is using, and the switches that make it lighter ----
+// (the graphics card switch only works from the start, so it's read here, before anything is drawn)
+try { if (readPrefs().noGpu) app.disableHardwareAcceleration(); } catch {}
+const partOfWc = (wc) => { try { if (wc.session === session.fromPartition("persist:fluxer")) return "fluxer"; if (wc.session === session.fromPartition("persist:discord")) return "discord"; if (PANEL_PARTS.some((p) => wc.session === session.fromPartition(p))) return "links"; } catch {} return "app"; };
+ipcMain.handle("perf:usage", () => {
+  const cores = Math.max(1, require("os").cpus().length);
+  const byPid = new Map();
+  for (const wc of webContents.getAllWebContents()) { try { byPid.set(wc.getOSProcessId(), partOfWc(wc)); } catch {} }
+  const parts = { app: { cpu: 0, mem: 0 }, fluxer: { cpu: 0, mem: 0 }, discord: { cpu: 0, mem: 0 }, links: { cpu: 0, mem: 0 }, gpu: { cpu: 0, mem: 0 } };
+  for (const m of app.getAppMetrics()) {
+    const k = m.type === "GPU" ? "gpu" : byPid.get(m.pid) || "app";
+    parts[k].cpu += (m.cpu?.percentCPUUsage || 0) / cores;
+    parts[k].mem += (m.memory?.workingSetSize || 0) / 1024; // (MB)
+  }
+  const total = Object.values(parts).reduce((a, p) => ({ cpu: a.cpu + p.cpu, mem: a.mem + p.mem }), { cpu: 0, mem: 0 });
+  return { parts, total, gpu: !readPrefs().noGpu };
+});
+ipcMain.handle("perf:spell", (e, on) => { for (const p of ["persist:fluxer", "persist:discord"]) { try { session.fromPartition(p).setSpellCheckerEnabled(!!on); } catch {} } return true; });
+// lighter memory: the sites' saved copies of pictures and files (sign-ins and settings stay)
+ipcMain.handle("perf:clean", async () => {
+  let freed = 0;
+  for (const p of PARTS) { try { const ses = session.fromPartition(p); freed += await ses.getCacheSize(); await ses.clearCache(); await ses.clearCodeCaches({}).catch(() => {}); } catch {} }
+  return { mb: Math.round(freed / 1048576) };
+});
 ipcMain.handle("prefs:set", (e, changes) => (changes && typeof changes === "object" ? writePrefs(changes) : readPrefs()));
 // pictures (skin pictures, wallpapers, banners): one small file each, next to the settings
 const imgDir = () => path.join(app.getPath("userData"), "pictures");
@@ -126,6 +150,7 @@ const ALLOWED = new Set(["media", "display-capture", "notifications", "clipboard
 function setUp(ses) {
   if (ses.__bcSetUp) return;
   ses.__bcSetUp = true;
+  try { if (readPrefs().noSpell) ses.setSpellCheckerEnabled(false); } catch {} // (Performance: spellcheck off)
   ses.setPermissionRequestHandler((wc, perm, ok) => ok(ALLOWED.has(perm)));
   ses.setPermissionCheckHandler((wc, perm) => ALLOWED.has(perm));
   ses.setDisplayMediaRequestHandler(async (req, answer) => {
