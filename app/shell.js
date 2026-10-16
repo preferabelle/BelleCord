@@ -194,7 +194,7 @@
     if (fontMem[key] !== undefined) return fontMem[key];
     try { const c = localStorage.getItem("bcfont:" + key); if (c) return (fontMem[key] = c); } catch {}
     try {
-      const css = await (await fetch("https://fonts.googleapis.com/css2?family=" + encodeURIComponent(F.g).replace(/%20/g, "+") + ":wght@400;700&display=swap", { signal: AbortSignal.timeout(10000) })).text();
+      const css = await (await fetch("https://fonts.googleapis.com/css2?family=" + encodeURIComponent(F.g).replace(/%20/g, "+") + ":wght@" + (F.w || "400;700") + "&display=swap", { signal: AbortSignal.timeout(10000) })).text();
       const files = new Map(); let out = "";
       for (const m of css.matchAll(/\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{([^}]*)\}/g)) {
         if (m[1] !== "latin" && m[1] !== "latin-ext") continue;
@@ -221,6 +221,10 @@
     if (tb[0] && tb[1] && tb.join() !== paintShell.tb && host.setTitleBar) { paintShell.tb = tb.join(); host.setTitleBar(tb[0], tb[1]).catch(() => {}); }
     const f = await fontCss(stack.font);
     if ($("shellfont").textContent !== (f || "")) $("shellfont").textContent = f || "";
+    // (the theme's cursor, here in the app too)
+    let sc = $("shellcursor"); if (!sc) { sc = document.createElement("style"); sc.id = "shellcursor"; document.head.appendChild(sc); }
+    const cc = T.cursorCss ? T.cursorCss(stack, T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(side).color) }), "html") : "";
+    if (sc.textContent !== cc) sc.textContent = cc;
     paintRailTop();
   }
 
@@ -437,7 +441,7 @@
   $("w-blur").oninput = (e) => { prefs.wBlur = Number(e.target.value); clearTimeout(later.wb); later.wb = setTimeout(() => { save({ wBlur: prefs.wBlur }); applyAll(); }, 200); };
 
   // ---------------- theme studio ----------------
-  const sameStack = (a, b) => ["palette", "background", "corners", "font", "size", "spacing"].every((k) => (a[k] || "") === (b[k] || "")) && [...(a.effects || [])].sort().join() === [...(b.effects || [])].sort().join();
+  const sameStack = (a, b) => ["palette", "background", "corners", "font", "size", "spacing"].every((k) => (a[k] || "") === (b[k] || "")) && (a.cursor || "site") === (b.cursor || "site") && [...(a.effects || [])].sort().join() === [...(b.effects || [])].sort().join();
   function preview(pieces) {
     const t = T.tokens(pieces, { fluxer: fxColors }), r = (T.CORNERS[pieces.corners] || {}).r ?? 8, F = T.FONTS[pieces.font];
     const L = T.bgLayer(pieces, t, { wall: null });
@@ -451,6 +455,7 @@
     if (s.background !== "none") bits.push((T.BACKGROUNDS[s.background] || {}).name);
     if (s.corners !== "site") bits.push((T.CORNERS[s.corners] || {}).name + " corners");
     if (s.font !== "site") bits.push((T.FONTS[s.font] || {}).name);
+    if (s.cursor && s.cursor !== "site" && T.CURSORS && T.CURSORS[s.cursor]) bits.push(T.CURSORS[s.cursor].name + " cursor");
     if (s.size !== "site") bits.push((T.SIZES[s.size] || {}).name + " text");
     if (s.spacing !== "site") bits.push((T.SPACING[s.spacing] || {}).name + " spacing");
     for (const e of s.effects || []) bits.push((T.EFFECTS[e] || {}).name);
@@ -464,6 +469,7 @@
   // ---- the mini app: how a theme looks before (and after) you pick it ----
   let miniWall = null;
   let themeQuery = ""; // what's typed in the theme search box
+  let tplGroup = "all"; // which group of pre-made themes is showing
   function mini(stack) {
     const t = T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(curSide()).color) });
     const r = (T.CORNERS[stack.corners] || {}).r ?? 8, F = T.FONTS[stack.font], fx = new Set(stack.effects || []);
@@ -488,11 +494,20 @@
     showMini(stack);
     ctxFor(curSide()).then((x) => { if (x.wall !== miniWall) { miniWall = x.wall; showMini(); } });
     $("theme-now").textContent = themeNow();
-    const mine = (P("myThemes") || []).map((m) => ({ id: "my:" + m.id, name: m.name, blurb: "Yours", pieces: m.pieces, mine: m.id }));
+    const mine = (P("myThemes") || []).map((m) => ({ id: "my:" + m.id, name: m.name, blurb: "Yours", pieces: m.pieces, mine: m.id, group: "mine" }));
     const all = [...mine, ...T.TEMPLATES];
     const q = (themeQuery || "").trim().toLowerCase();
-    const shown = q ? all.map((tp, i) => ({ tp, i })).filter(({ tp }) => (tp.name + " " + (tp.blurb || "")).toLowerCase().includes(q)) : all.map((tp, i) => ({ tp, i }));
-    setHtml($("templates"), shown.length ? shown.map(({ tp, i }) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '">' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join("") : '<p class="empty">No themes match "' + esc(q) + '".</p>');
+    // (the groups along the top: All, Yours, Classic, Games, Anime, Soulbound, Moods)
+    const groups = (T.TEMPLATE_GROUPS || []).filter(([g]) => g === "all" || all.some((tp) => (tp.group || "classic") === g));
+    if (!groups.some(([g]) => g === tplGroup)) tplGroup = "all";
+    if ($("tpl-groups")) {
+      setHtml($("tpl-groups"), groups.map(([g, label]) => '<button class="tg' + (g === tplGroup ? " on" : "") + '" data-tg="' + g + '">' + esc(label) + ' <small>' + (g === "all" ? all.length : all.filter((tp) => (tp.group || "classic") === g).length) + "</small></button>").join(""));
+      $("tpl-groups").querySelectorAll("[data-tg]").forEach((b) => (b.onclick = () => { tplGroup = b.dataset.tg; paintStudio(); }));
+    }
+    const inGroup = (tp) => tplGroup === "all" || q || (tp.group || "classic") === tplGroup;
+    const shown = all.map((tp, i) => ({ tp, i })).filter(({ tp }) => inGroup(tp) && (!q || (tp.name + " " + (tp.blurb || "") + " " + (tp.group || "")).toLowerCase().includes(q)));
+    const curOf = (tp) => { const c = T.CURSORS && T.CURSORS[tp.pieces.cursor]; return c && c.url ? ' style="' + esc("cursor:" + c.url(T.tokens(tp.pieces, { fluxer: fxColors })) + ",pointer") + '"' : ""; };
+    setHtml($("templates"), shown.length ? shown.map(({ tp, i }) => '<button class="tpl' + (sameStack(stack, tp.pieces) ? " on" : "") + '" data-i="' + i + '"' + curOf(tp) + '>' + preview(tp.pieces) + "<b>" + esc(tp.name) + "</b><small>" + esc(tp.blurb) + "</small>" + (tp.mine ? '<span class="x" data-del="' + esc(tp.mine) + '" title="Delete">✕</span>' : "") + "</button>").join("") : '<p class="empty">No themes match "' + esc(q) + '".</p>');
     const asPicked = (tp) => { const p = { ...tp.pieces, effects: [...(tp.pieces.effects || [])] }; if (P("keepColors") && !tp.mine) p.palette = P("theme").palette; return { ...P("theme"), ...p }; };
     $("templates").querySelectorAll(".tpl").forEach((b) => { b.onmouseenter = () => showMini(asPicked(all[Number(b.dataset.i)])); b.onmouseleave = () => showMini(); });
     $("templates").querySelectorAll(".tpl").forEach((b) => (b.onclick = async (e) => {
@@ -530,7 +545,7 @@
     const pick = (obj, excl) => { const ks = Object.keys(obj).filter((k) => !(excl || []).includes(k)); return ks[Math.floor(Math.random() * ks.length)]; };
     const pool = Object.keys(T.EFFECTS), chosen = [], n = Math.floor(Math.random() * 3); // 0-2 effects
     for (let i = 0; i < n && pool.length; i++) chosen.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-    setTheme({ palette: pick(T.PALETTES, ["fluxer"]), background: pick(T.BACKGROUNDS, ["wallpaper"]), corners: pick(T.CORNERS), font: pick(T.FONTS), size: pick(T.SIZES), spacing: pick(T.SPACING), effects: chosen });
+    setTheme({ palette: pick(T.PALETTES, ["fluxer"]), background: pick(T.BACKGROUNDS, ["wallpaper"]), corners: pick(T.CORNERS), font: pick(T.FONTS, ["pressstart", "creepster", "vt323"]), size: pick(T.SIZES), spacing: pick(T.SPACING), effects: chosen, cursor: T.CURSORS && Math.random() < 0.35 ? pick(T.CURSORS, ["site"]) : "site" });
     toast("Surprise! Tweak it below, or hit Start over.");
   };
 
