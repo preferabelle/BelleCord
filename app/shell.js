@@ -550,12 +550,13 @@
   };
 
   // ---------------- quick links: TikTok, Pinterest, X, and yours ----------------
+  const SFX = (window.bcApp && window.bcApp.profile && window.bcApp.profile.suffix) || ""; // (each person on this computer has their own sign-ins)
   const BUILTIN = [
-    { id: "tiktok", name: "TikTok", letter: "T", url: "https://www.tiktok.com/", part: "persist:tiktok" },
-    { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" },
-    { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" },
+    { id: "tiktok", name: "TikTok", letter: "T", url: "https://www.tiktok.com/", part: "persist:tiktok" + SFX },
+    { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" + SFX },
+    { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" + SFX },
   ];
-  const allLinks = () => [...BUILTIN, ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" }))];
+  const allLinks = () => [...BUILTIN, ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
   const panels = new Map();
   let openId = null;
   function drawLinks() {

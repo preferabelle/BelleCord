@@ -123,6 +123,13 @@
   const openThemes = () => { showSec("s-theme"); setTimeout(() => { const w = $("tplwrap"); if (w && w.hidden) clickIf("#tpl-toggle"); }, 300); };
   const rowOf = (sel) => { const el = document.querySelector(sel); return el && el.closest(".prow"); };
   const TOURS = {
+    13: { name: "Update 13", steps: () => [
+      { title: "Update 13: share BelleCord", xp: 0, text: () => "One computer, a few people? Everyone can have their own BelleCord now: their own Fluxer and Discord sign-ins, their own look, their own badges. Swapping is one click." },
+      { at: "#r-who", title: "Who's using BelleCord", xp: 50, before: () => { const m = $("whomenu"); if (m) m.hidden = true; }, text: () => "This round button at the bottom of your servers is you. Click it to see everyone on this computer.",
+        try: { what: "Click it", done: () => { const m = $("whomenu"); return !!m && !m.hidden; } } },
+      { at: "#whomenu", title: "Swap in one click", xp: 50, before: () => { if (window.bcProfiles) window.bcProfiles.open(); }, text: () => "Click someone to swap to them. <b>Add someone</b> makes a new person (they sign in once, then it remembers). <b>✎</b> changes a name, color or picture." },
+      { title: "That's Update 13", end: true, xp: 50, text: () => "Your sign-ins stay yours. Nobody else's account shows up unless you swap to them." },
+    ] },
     12: { name: "Update 12", steps: () => [
       { title: "Update 12: the theme pack", xp: 0, text: () => "This update is all about making BelleCord look like <i>you</i>: 39 new themes in groups, cursors, effects, backgrounds, fonts and colors. Let's look." },
       { at: "#s-theme", title: "Theme studio", xp: 25, before: openThemes, text: () => "Everything lives here. The pre-made themes are open now (the 🎨 button opens and closes them)." },
