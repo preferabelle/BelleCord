@@ -226,7 +226,7 @@
     if (side === "fluxer") {
       var col = document.querySelector('[data-flx="app.guilds-layout.guild-list.guild-list-scroller-wrapper"]');
       if (what === "dm") return go("/channels/@me");
-      if (what === "add") { var ab = document.querySelector('[data-flx="app.sidebar-nav.add-guild-button.button.add-guild"]'); if (ab) { ab.click(); return 1; } return 0; }
+      if (what === "add") { var ab = document.querySelector('[data-flx="app.sidebar-nav.add-guild-button.button.add-guild"]') || document.querySelector('[data-flx*="add-guild"]'); if (ab) return tap(ab); return 0; }
       if (what === "g") { var g = col && col.querySelector('[data-guild-id="' + arg + '"]'); if (g) return tap(g); return go("/channels/" + arg); }
       if (what === "f") { var fs = col ? col.querySelectorAll('[data-flx="app.sidebar-nav.guild-folder-item.folder-header.toggle-expanded"]') : []; var fe = fs[parseInt(String(arg).split(":")[1], 10) - 1]; if (fe) return toggle(fe); return 0; }
       if (what === "voice") { var items = document.querySelectorAll('[data-flx="app.generic-channel-item.long-pressable.click"][data-dnd-name],[data-channel-list-focus-item="true"][data-dnd-name]'); for (var v = 0; v < items.length; v++) if ((items[v].getAttribute("data-dnd-name") || "") === arg && /voice channel/i.test(items[v].getAttribute("aria-label") || "")) { items[v].click(); return 1; } return 0; }
