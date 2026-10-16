@@ -34,6 +34,7 @@
     "#s-new .wn summary::before{content:'▸';color:var(--dim);transition:transform .15s}#s-new .wn[open] summary::before{transform:rotate(90deg)}",
     "#s-new .wn summary small{margin-left:auto;color:var(--dim);font-weight:400;font-size:12px}",
     "#s-new .wn .body{padding:0 18px 12px 34px;font-size:14px;line-height:1.55;color:var(--text)}#s-new .wn .body ul{margin:4px 0;padding-left:18px}#s-new .wn .body li{margin:4px 0}#s-new .wn .body p{margin:6px 0}",
+    "#s-new .wn .wn-tour{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px!important}#s-new .wn .wn-tour button{background:var(--accent);color:var(--onaccent);font-weight:600}",
     "#s-new .wn .body b{color:var(--strong)}#s-new .wn .body code{background:var(--bg);border-radius:4px;padding:0 4px}",
     "#s-new .wn.latest{box-shadow:inset 3px 0 0 var(--accent)}",
     "#s-new h2 .newtag,#s-new .wn .newtag{display:inline-block;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:.08em;padding:2px 7px;border-radius:8px;background:#f23f43;color:#fff;vertical-align:middle}",
@@ -53,9 +54,10 @@
     const latest = list[0] ? list[0].n : 0, seen = Number(P("whatsNewSeen", 0)) || 0;
     const h2 = sec.querySelector("h2"); h2.innerHTML = "What's new" + (latest > seen ? '<span class="newtag">NEW</span>' : "");
     const shown = showAll ? list : list.slice(0, 3);
-    box.innerHTML = shown.map((u, i) => '<details class="wn' + (i === 0 ? " latest" : "") + '"' + (i === 0 ? " open" : "") + "><summary>" + esc(u.n > 1 ? "Update " + u.n : "The first version") + (u.n > seen && u.n === latest ? '<span class="newtag">NEW</span>' : "") + (u.at ? "<small>" + esc(new Date(u.at).toLocaleDateString()) + "</small>" : "") + '</summary><div class="body">' + (md(u.notes) || '<p class="dim">Small fixes.</p>') + "</div></details>").join("") +
+    box.innerHTML = shown.map((u, i) => '<details class="wn' + (i === 0 ? " latest" : "") + '"' + (i === 0 ? " open" : "") + "><summary>" + esc(u.n > 1 ? "Update " + u.n : "The first version") + (u.n > seen && u.n === latest ? '<span class="newtag">NEW</span>' : "") + (u.at ? "<small>" + esc(new Date(u.at).toLocaleDateString()) + "</small>" : "") + '</summary><div class="body">' + (md(u.notes) || '<p class="dim">Small fixes.</p>') + (window.bcTutorial && window.bcTutorial.hasTour && window.bcTutorial.hasTour(u.n) ? '<p class="wn-tour"><button data-tour="' + u.n + '">▶ Take the tour</button> <span class="dim">A quick walk through just this update</span></p>' : "") + "</div></details>").join("") +
       (list.length > 3 ? '<div class="more"><button id="wn-more">' + (showAll ? "Show fewer" : "Show all " + list.length + " updates") + "</button></div>" : "");
     const mb = $("wn-more"); if (mb) mb.onclick = () => { showAll = !showAll; draw(); };
+    box.querySelectorAll("[data-tour]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); if (window.bcTutorial) window.bcTutorial.start(Number(b.dataset.tour)); }));
   }
   // (seen once it's actually on screen on the dashboard)
   setInterval(() => {
