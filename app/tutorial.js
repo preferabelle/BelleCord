@@ -45,11 +45,14 @@
     { at: "#s-skins", title: "Skins", xp: 50, before: () => showSec("s-skins"), text: () => "A skin is your own look: a name, a color, a picture, a banner and a wallpaper. Press <b>+ New skin</b> to make one." },
     { at: "#r-dash", tip: true, title: "Make the dashboard yours", xp: 100, before: () => showSec("s-skins"),
       text: () => "A skin's <b>Picture</b> becomes your dashboard button (this one) and the big picture at the top of the dashboard. Its wallpaper and banner dress the whole app. <b>Right-click the dashboard button</b> to change the picture in one click." },
+    { at: "#org-btn", tip: true, title: "Organize your dashboard", xp: 100, skip: () => !$("org-btn"), before: () => { go("dash"); setTimeout(() => { const h = $("hero"); if (h) h.scrollIntoView({ block: "start" }); }, 250); },
+      text: () => "Press <b>Organize</b> to drag the sections into the order you like, and <b>Hide</b> the ones you don't use. Hidden ones wait at the top of Organize, and <b>Add back</b> brings them back any time." },
     { at: "#s-skins", tip: true, title: "A different skin on each side", xp: 100, before: () => showSec("s-skins"),
       text: () => "Make two skins, then press <b>Wear on Fluxer</b> on one and <b>Wear on Discord</b> on the other. Each side gets its own color, picture and wallpaper, and they swap as you switch sides." },
     { at: "#s-badges", tip: true, title: "Game badges", xp: 100, before: () => showSec("s-badges"),
       text: () => "Show off your ranks next to your name, on both Fluxer and Discord, for everyone using BelleCord. Overwatch, Minecraft, Roblox, Dota 2, the chess sites and more fill in from your <b>real profile</b>, so nobody can fake a rank. Click a game to add yours." },
     { at: "#s-perf", title: "Performance", xp: 50, skip: () => !$("s-perf"), before: () => showSec("s-perf"), text: () => "If your computer feels slow, pick <b>Light</b> or <b>Battery saver</b>. The numbers at the top show what BelleCord is using right now." },
+    { at: "#s-bot", title: "Your bridge bot", xp: 25, skip: () => !$("s-bot"), before: () => showSec("s-bot"), text: () => "Want your own Fluxer and Discord servers joined into one? Paste two bot tokens here and press <b>Start</b>. It runs while BelleCord is open." },
     { at: "#s-app", title: "Settings", xp: 25, before: () => showSec("s-app"), text: () => "Your name, swapping the sides, animations and updates. If Fluxer ever won't load, <b>🔧 Fix Fluxer</b> is here too." },
     { at: "#tutbtn", title: "Replay", xp: 25, text: () => "This plays the tutorial again whenever you want." },
     { title: "Mission complete", end: true, xp: 100, text: () => "That's everything. You're officially a BelleCord pilot, and you've got the badge to prove it." },
@@ -120,7 +123,9 @@
   const total = () => list.reduce((n, m) => n + (m.xp || 0), 0);
   function start() {
     stop(true);
-    list = MISSIONS().filter((m) => !(m.skip && m.skip()));
+    // (a dashboard section you hid with Organize is skipped too)
+    const hiddenSec = (m) => { const id = /^#(s-[\w-]+)$/.exec(m.at || ""); const el = id && $(id[1]); return !!(el && el.classList.contains("org-off")); };
+    list = MISSIONS().filter((m) => !(m.skip && m.skip()) && !hiddenSec(m));
     i = 0; xp = 0; startedFrom = body.dataset.mode;
     root = document.createElement("div");
     root.id = "bctut";

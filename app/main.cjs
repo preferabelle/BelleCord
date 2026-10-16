@@ -119,6 +119,8 @@ ipcMain.handle("img:set", (e, key, data) => {
   } catch { return false; }
 });
 ipcMain.handle("notify", (e, { title, body }) => { try { if (Notification.isSupported()) new Notification({ title: String(title || NAME), body: String(body || ""), ...withIcon() }).show(); } catch {} });
+// BridgeCord: your own bridge bot, run from here (bridgebot.cjs)
+try { require("./bridgebot.cjs")({ app, ipcMain, net, shell }); } catch (e) { console.error("BridgeCord part didn't load:", e); }
 ipcMain.handle("open-external", (e, url) => { if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url)); });
 
 // ---- Fix Fluxer: one button for whatever keeps Fluxer from working here (DNS, a hosts-file block, a proxy, a

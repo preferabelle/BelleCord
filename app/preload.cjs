@@ -26,6 +26,18 @@ contextBridge.exposeInMainWorld("bcApp", {
   perfSpell: (on) => ipcRenderer.invoke("perf:spell", !!on),
   perfClean: () => ipcRenderer.invoke("perf:clean"),
   perfTop: () => ipcRenderer.invoke("perf:top"),
+  // BridgeCord: your own bridge bot, run from the app (bridgebot.cjs)
+  bridgeBot: {
+    status: () => ipcRenderer.invoke("bridgebot:status"),
+    start: () => ipcRenderer.invoke("bridgebot:start"),
+    stop: () => ipcRenderer.invoke("bridgebot:stop"),
+    tokens: (t) => ipcRenderer.invoke("bridgebot:tokens", { fluxer: String((t && t.fluxer) || ""), discord: String((t && t.discord) || "") }),
+    check: () => ipcRenderer.invoke("bridgebot:check"),
+    update: () => ipcRenderer.invoke("bridgebot:update"),
+    auto: (on) => ipcRenderer.invoke("bridgebot:auto", !!on),
+    folder: () => ipcRenderer.invoke("bridgebot:folder"),
+    getNode: () => ipcRenderer.invoke("bridgebot:node"),
+  },
   onFluxerProgress: (fn) => ipcRenderer.on("fluxer-progress", (e, step) => { try { fn(step); } catch (x) {} }),
   setTitleBar: (color, symbol) => ipcRenderer.invoke("titlebar", { color, symbol }),
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),

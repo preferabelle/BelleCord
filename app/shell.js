@@ -633,6 +633,21 @@
   }
   setInterval(sayHello, 6 * 3600000);
   setTimeout(sayHello, 15000);
+  // "this copy is open": a quick check-in every 5 minutes, so I can see how many people have BelleCord and how many
+  // are on it right now. It sends a random number that's only this copy's, your two account numbers and which update
+  // you're on. Nothing else.
+  function stillHere() {
+    try {
+      let id = P("installId");
+      if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); save({ installId: id }); }
+      const me = P("me") || {}, ids = {};
+      for (const s2 of ["fluxer", "discord"]) if (me[s2] && me[s2].id) ids[s2] = me[s2].id;
+      const v = ((($("app-ver") || {}).textContent || "").match(/Update (\d+)/) || [])[1] || "";
+      hub("POST", "/v1/alive", { install: id, ids, v });
+    } catch (e) {}
+  }
+  setTimeout(stillHere, 20000);
+  setInterval(stillHere, 5 * 60000);
   const people2 = new Map(); // "fluxer:id" -> person or null (fetched this session)
   const asking = new Set(); let askTimer = null;
   const badgeList = (person) => {
