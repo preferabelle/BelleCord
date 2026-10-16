@@ -79,7 +79,10 @@
   // ---------------- what they do on the sites ----------------
   const PAUSE = "(function(){var s=document.getElementById('bc-pause');if(!s){s=document.createElement('style');s.id='bc-pause';s.textContent='*,*::before,*::after{animation-play-state:paused!important}';(document.head||document.documentElement).appendChild(s);}document.querySelectorAll('video').forEach(function(v){if(!v.paused&&!v.closest('[class*=\"voice\"],[class*=\"stream\"],[class*=\"call\"]')){v.dataset.bcPaused='1';try{v.pause()}catch(e){}}});return 1})()";
   const UNPAUSE = "(function(){var s=document.getElementById('bc-pause');if(s)s.remove();document.querySelectorAll('video[data-bc-paused]').forEach(function(v){delete v.dataset.bcPaused;try{v.play()}catch(e){}});return 1})()";
-  const STILL = "(function(){if(document.getElementById('bc-still'))return 1;var s=document.createElement('style');s.id='bc-still';s.textContent='*,*::before,*::after{animation:none!important;transition:none!important}';(document.head||document.documentElement).appendChild(s);return 1})()";
+  // (animations are made instant, not removed: Fluxer and Discord wait for a menu's or a popup's animation to finish
+  // before it works, so with them removed outright, lots of buttons stopped doing anything)
+  const STILL_CSS = "*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}";
+  const STILL = "(function(){var s=document.getElementById('bc-still');if(!s){s=document.createElement('style');s.id='bc-still';(document.head||document.documentElement).appendChild(s);}s.textContent=" + JSON.stringify(STILL_CSS) + ";return 1})()";
   const UNSTILL = "(function(){var s=document.getElementById('bc-still');if(s)s.remove();return 1})()";
   const run = (side, code) => { const w = $("wv-" + side); if (!w || !w.executeJavaScript) return; try { w.executeJavaScript(code).catch(() => {}); } catch {} };
   const seen = (side) => { const m = body.dataset.mode; return m === "both" || m === side; };
@@ -116,7 +119,7 @@
     "#s-perf .opts input{margin-top:3px;width:16px;height:16px;flex:none}#s-perf .opts small{display:block;color:var(--dim);font-size:12px}",
     "#s-perf .usage .me{color:var(--accent);font-weight:600}#s-perf .ram{margin-bottom:10px;font-size:13px}#s-perf .ram .bar{height:10px;border-radius:5px;background:var(--bg);overflow:hidden;margin-top:4px}#s-perf .ram .bar i{display:block;height:100%;border-radius:5px;transition:width .6s}",
     "#s-perf .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}",
-    "body.perf-still #dash *,body.perf-still #dash *::before,body.perf-still #dash *::after{animation-play-state:paused!important}",
+    "body.perf-still #dash *,body.perf-still #dash *::before,body.perf-still #dash *::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important}",
   ].join("\n");
   document.head.appendChild(css);
 
