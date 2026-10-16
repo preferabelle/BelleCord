@@ -118,55 +118,14 @@
     appCard.appendChild(b);
   }
 
-  // ---------------- tours: a short tutorial for just one update (from its "▶ Take the tour" in What's new) ----------------
-  const clickIf = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
-  const openThemes = () => { showSec("s-theme"); setTimeout(() => { const w = $("tplwrap"); if (w && w.hidden) clickIf("#tpl-toggle"); }, 300); };
-  const rowOf = (sel) => { const el = document.querySelector(sel); return el && el.closest(".prow"); };
-  const TOURS = {
-    13: { name: "Update 13", steps: () => [
-      { title: "Update 13: share BelleCord", xp: 0, text: () => "One computer, a few people? Everyone can have their own BelleCord now: their own Fluxer and Discord sign-ins, their own look, their own badges. Swapping is one click." },
-      { at: "#r-who", title: "Who's using BelleCord", xp: 50, before: () => { const m = $("whomenu"); if (m) m.hidden = true; }, text: () => "This round button at the bottom of your servers is you. Click it to see everyone on this computer.",
-        try: { what: "Click it", done: () => { const m = $("whomenu"); return !!m && !m.hidden; } } },
-      { at: "#whomenu", title: "Swap in one click", xp: 50, before: () => { if (window.bcProfiles) window.bcProfiles.open(); }, text: () => "Click someone to swap to them. <b>Add someone</b> makes a new person (they sign in once, then it remembers). <b>✎</b> changes a name, color or picture." },
-      { title: "That's Update 13", end: true, xp: 50, text: () => "Your sign-ins stay yours. Nobody else's account shows up unless you swap to them." },
-    ] },
-    12: { name: "Update 12", steps: () => [
-      { title: "Update 12: the theme pack", xp: 0, text: () => "This update is all about making BelleCord look like <i>you</i>: 39 new themes in groups, cursors, effects, backgrounds, fonts and colors. Let's look." },
-      { at: "#s-theme", title: "Theme studio", xp: 25, before: openThemes, text: () => "Everything lives here. The pre-made themes are open now (the 🎨 button opens and closes them)." },
-      { at: "#tpl-groups", title: "Themes in groups", xp: 50, before: openThemes, text: () => "Classic, Games, Anime, Soulbound and Moods. Pick a group to see just those.",
-        try: { what: "Pick any group", done: () => { const on = document.querySelector("#tpl-groups .tg.on"); return !!on && on.dataset.tg !== "all"; } } },
-      { at: "#templates", title: "osu!", xp: 100, before: () => { openThemes(); setTimeout(() => clickIf('#tpl-groups [data-tg="games"]'), 450); },
-        text: () => "The full osu! look: hit circles behind the chat, the Exo font, and an osu! circle cursor. <b>osu!lazer</b> is the newer look with triangles. Hover a theme to preview it (and its cursor).",
-        try: { what: "Put on osu! or osu!lazer", done: () => /osu!/.test(($("theme-now") || {}).textContent || "") } },
-      { at: "#pieces", title: "Cursors", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { const r = rowOf('#pieces [data-cat="cursor"]'); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => rowOf('#pieces [data-cat="cursor"]'),
-        text: () => "A whole new row: 22 cursors, drawn in your theme's colors, on Fluxer, Discord and here. Anywhere you type keeps the normal text cursor." },
-      { at: "#pieces", title: "New effects", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { const r = rowOf('#pieces [data-fx="grain"]'); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => rowOf('#pieces [data-fx="grain"]'),
-        text: () => "<b>Film grain</b>, <b>Vignette</b> (darker edges) and <b>Neon names</b> (everyone's name glows in its own color). Mix them with anything." },
-      { at: "#theme-surprise", tip: true, title: "Feeling lucky?", xp: 25, before: () => showSec("s-theme"), text: () => "<b>🎲 Surprise me</b> can pick a cursor now too. <b>Start over</b> undoes everything." },
-      { title: "That's Update 12", end: true, xp: 50, text: () => "Have fun dressing it up." },
-    ] },
-    11: { name: "Update 11", steps: () => [
-      { title: "Update 11", xp: 0, text: () => "Your dashboard, your way, and your own bridge bot. Here's what came in it." },
-      { at: "#org-btn", title: "Organize", xp: 100, before: () => { go("dash"); setTimeout(() => { const h = $("hero"); if (h) h.scrollIntoView({ block: "start" }); }, 250); },
-        text: () => "Drag sections into any order, hide the ones you don't use, and bring them back later.",
-        try: { what: "Press Organize", done: () => document.body.classList.contains("org-on") } },
-      { at: "#s-bot", title: "Your bridge bot", xp: 50, skip: () => !$("s-bot") || $("s-bot").classList.contains("org-off"), before: () => { if (document.body.classList.contains("org-on")) clickIf("#org-btn"); showSec("s-bot"); }, text: () => "Join your own Fluxer community and Discord server into one: paste two bot tokens and press Start." },
-      { at: "#s-new", title: "What's new", xp: 25, skip: () => !$("s-new") || $("s-new").classList.contains("org-off"), before: () => showSec("s-new"), text: () => "Every update's notes, newest first. Updates with a tour (like this one) have a <b>▶ Take the tour</b> button." },
-      { at: "#s-perf", title: "Performance", xp: 25, skip: () => !$("s-perf") || $("s-perf").classList.contains("org-off"), before: () => showSec("s-perf"), text: () => "See what BelleCord is using, and pick Light or Battery saver if your computer feels slow." },
-      { title: "That's Update 11", end: true, xp: 50, text: () => "Enjoy." },
-    ] },
-  };
-  let tour = null; // (the tour that's playing, or null for the full tutorial)
-
   // ---------------- playing it ----------------
   let list = [], i = 0, xp = 0, root = null, trying = null, tryTimer = null, startedFrom = null;
   const total = () => list.reduce((n, m) => n + (m.xp || 0), 0);
-  function start(n) {
+  function start() {
     stop(true);
-    tour = n != null && TOURS[n] ? TOURS[n] : null;
     // (a dashboard section you hid with Organize is skipped too)
     const hiddenSec = (m) => { const id = /^#(s-[\w-]+)$/.exec(m.at || ""); const el = id && $(id[1]); return !!(el && el.classList.contains("org-off")); };
-    list = (tour ? tour.steps() : MISSIONS()).filter((m) => !(m.skip && m.skip()) && !hiddenSec(m));
+    list = MISSIONS().filter((m) => !(m.skip && m.skip()) && !hiddenSec(m));
     i = 0; xp = 0; startedFrom = body.dataset.mode;
     root = document.createElement("div");
     root.id = "bctut";
@@ -183,7 +142,7 @@
     removeEventListener("keydown", onKey, true);
     removeEventListener("resize", place);
     if (root) { root.remove(); root = null; }
-    if (!quiet && !tour) save({ tutDone: true });
+    if (!quiet) save({ tutDone: true });
   }
   function onKey(e) {
     if (!root) return;
@@ -212,7 +171,7 @@
   }
   function target(m) {
     if (!m.at) return null;
-    const el = (m.target && m.target()) || document.querySelector(m.at);
+    const el = document.querySelector(m.at);
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return r.width && r.height ? r : null;
@@ -225,12 +184,7 @@
     const level = i + 1, n = list.length;
     const card = root.querySelector(".card");
     const pct = Math.round((xp / Math.max(1, total())) * 100);
-    if (m.end && tour) {
-      card.innerHTML = '<div class="top">🏁 Tour complete<span class="lv">' + n + " / " + n + '</span></div><div class="end"><div class="rank">🎉</div><h3>' + esc(m.title) + "</h3><p>" + m.text() + "</p></div>" +
-        '<div class="xp"><i style="width:100%"></i></div><div class="xpline"><span>' + total() + " XP</span><span>MAX</span></div>" +
-        '<div class="btns"><button class="back">←</button><button class="next">Finish ▶</button></div>';
-      confetti();
-    } else if (m.end) {
+    if (m.end) {
       const all = total();
       const pilotSvg = window.bcGames && window.bcGames.icon ? window.bcGames.icon("pilot").replace(/width="15" height="15"/, 'width="40" height="40"') : "✈";
       card.innerHTML = '<div class="top">🏁 Mission complete<span class="lv">' + n + " / " + n + '</span></div><div class="end"><div class="rank">🏆</div><h3>Rank: BelleCord Pilot</h3><p>' + m.text() + "</p>" +
@@ -240,11 +194,11 @@
       confetti();
       try { window.bcEarnPilot && window.bcEarnPilot(); } catch {}
     } else {
-      card.innerHTML = '<div class="top">' + (i === 0 ? (tour ? "▶ " + esc(tour.name) + " tour" : "▶ Tutorial") : m.tip ? "⭐ Pro tip" : "Mission " + (level - 1)) + '<span class="lv">' + level + " / " + n + '</span><button class="x" title="Skip (Esc)" aria-label="Skip">✕</button></div>' +
+      card.innerHTML = '<div class="top">' + (i === 0 ? "▶ Tutorial" : m.tip ? "⭐ Pro tip" : "Mission " + (level - 1)) + '<span class="lv">' + level + " / " + n + '</span><button class="x" title="Skip the tutorial (Esc)" aria-label="Skip the tutorial">✕</button></div>' +
         '<div class="in"><div class="face">' + (i === 0 ? "👋" : m.tip ? "💡" : "⭐") + "</div><div><h3>" + esc(m.title) + "</h3><p>" + m.text() + "</p></div></div>" +
         (m.try ? '<div class="quest" id="tq">🎯 <span>Try it: ' + esc(m.try.what) + "</span></div>" : "") +
         '<div class="xp"><i style="width:' + pct + '%"></i></div><div class="xpline"><span>' + xp + " XP</span><span>" + (m.xp ? "+" + m.xp + " XP for this one" : "Press Enter to start") + "</span></div>" +
-        '<div class="btns">' + (i > 0 ? '<button class="back" title="Back (←)">←</button>' : "") + '<button class="skip" title="Esc">' + (tour ? "Skip tour" : "Skip tutorial") + '</button><button class="next">' + (i === 0 ? "Start ▶" : "Next ▶") + "</button></div>";
+        '<div class="btns">' + (i > 0 ? '<button class="back" title="Back (←)">←</button>' : "") + '<button class="skip" title="Esc">Skip tutorial</button><button class="next">' + (i === 0 ? "Start ▶" : "Next ▶") + "</button></div>";
     }
     const bk = card.querySelector(".back"); if (bk) bk.onclick = back;
     // (Skip and ✕ act the moment they're pressed, so nothing else on the page can get in the way of the click)
@@ -307,7 +261,7 @@
       setTimeout(() => c.remove(), 4200);
     }
   }
-  window.bcTutorial = { start, stop, hasTour: (n) => !!TOURS[n] };
+  window.bcTutorial = { start, stop };
 
   // the first time: a little note pointing at the 🎮 (once, after the intro and the name box are gone)
   const wait = setInterval(() => {
