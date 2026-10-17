@@ -6,6 +6,7 @@
 <title>BelleCord</title>
 <link rel="stylesheet" href="shell.css">
 <style id="shellfont"></style>
+<script src="swapcover.js"></script>
 </head>
 <body data-mode="fluxer" data-rail="cols">
 <header id="bar">
@@ -52,13 +53,15 @@
         <h2>Theme studio</h2>
         <div class="mini" id="mini" aria-label="Preview"></div>
         <div class="card nowcard"><div><b>Now</b><div id="theme-now" class="dim"></div></div><div class="row tight"><button id="theme-surprise" title="Pick a whole look at random">🎲 Surprise me</button><input id="theme-name" placeholder="Name it" maxlength="30"><button id="theme-save">Save as my theme</button><button id="theme-reset" title="Back to your Fluxer theme only">Start over</button><button id="tpl-toggle" aria-expanded="false" title="Ready-made looks to start from">🎨 Pre-made themes ▸</button></div></div>
+        <h3 class="sub">Make your own</h3>
+        <div id="pieces" class="pieces"></div>
+        <h3 class="sub">Pre-made themes</h3>
+        <p class="dim small" style="margin:-4px 0 10px">Ready-made looks to start from, or to wear as they are.</p>
         <div id="tplwrap" class="tplwrap" hidden>
           <div class="row tplbar"><input id="tpl-search" class="tplsearch" placeholder="Search themes..." aria-label="Search themes"><label class="keep"><input type="checkbox" id="keep-colors"> Keep my colors</label></div>
           <div id="tpl-groups" class="tplgroups"></div>
           <div id="templates" class="templates"></div>
         </div>
-        <h3 class="sub">Theme options</h3>
-        <div id="pieces" class="pieces"></div>
       </section>
 
       <section class="sec" id="s-inbox">
@@ -121,11 +124,11 @@
   </section>
 
   <section class="pane site" id="fluxer" aria-label="Fluxer">
-    <webview id="wv-fluxer" src="https://web.fluxer.app/channels/@me" partition="persist:fluxer" allowpopups></webview>
+    <webview id="wv-fluxer" data-src="https://web.fluxer.app/channels/@me" data-part="fluxer" allowpopups></webview>
     <div class="fail" hidden><h2>Couldn't reach Fluxer</h2><p class="why"></p><div class="row tight failbtns"><button class="primary retry">Try again</button><button class="fxfix" title="Open Fix Fluxer on the dashboard">🔧 Fix Fluxer</button></div></div>
   </section>
   <section class="pane site" id="discord" aria-label="Discord">
-    <webview id="wv-discord" src="https://discord.com/app" partition="persist:discord" allowpopups></webview>
+    <webview id="wv-discord" data-src="https://discord.com/app" data-part="discord" allowpopups></webview>
     <div class="fail" hidden><h2>Couldn't reach Discord</h2><p class="why"></p><button class="primary retry">Try again</button></div>
   </section>
   <div id="divider" title="Drag to resize"></div>
@@ -140,6 +143,7 @@
 <div id="bcsplash" hidden><div class="hex"></div><div class="st s1"></div><div class="st s2"></div><div class="st s3"></div><div class="core"><div class="wm" id="bcswm"></div><div class="sub" id="bcspilot"></div><div class="sync" id="bcsync">SYNC RATIO 0%</div><div class="bar"><i></i></div></div></div>
 <input type="file" id="filepick" accept="image/*" hidden>
 <div id="toast" role="status"></div>
+<script src="profiles.js"></script>
 <script src="themes.js"></script>
 <script src="games.js"></script>
 <script src="rail.js"></script>

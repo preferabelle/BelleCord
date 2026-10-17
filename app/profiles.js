@@ -30,10 +30,13 @@
   css.textContent = [
     ".pf-face{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 30% 25%,color-mix(in srgb,var(--pc) 60%,#fff),var(--pc) 70%);color:#fff;font-weight:800;flex:none;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}",
     ".pf-face img{width:100%;height:100%;object-fit:cover}",
-    "#r-who{background:transparent;width:44px;height:44px}#r-who .pic{border-radius:50%}#r-who:hover{border-radius:50%}",
-    "#r-who .pf-face{width:100%;height:100%;font-size:17px;transition:transform .25s cubic-bezier(.3,1.4,.5,1)}#r-who:hover .pf-face{transform:scale(1.07)}",
-    "#r-who .n{position:absolute;right:-3px;bottom:-3px;min-width:16px;height:16px;border-radius:8px;background:var(--side);color:var(--strong);font:700 10px/16px sans-serif;text-align:center;box-shadow:0 0 0 2px var(--bg);padding:0 3px}",
-    "#whomenu{position:fixed;left:calc(var(--railw) - 6px);bottom:60px;width:270px;background:var(--side);border:1px solid var(--line);border-radius:calc(var(--r) * 1.4);padding:8px;z-index:30;box-shadow:0 14px 40px rgba(0,0,0,.45);transform-origin:bottom left}",
+    // (a slim strip in the bottom-left corner, under the server list: your picture, your name, and the swap arrows)
+    "#r-who{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);margin:2px 6px 0;padding:4px 6px;border-radius:10px;background:color-mix(in srgb,var(--bg) 55%,#000);color:var(--text);text-align:left;min-height:34px;transition:background .15s}",
+    "#r-who:hover{background:color-mix(in srgb,var(--bg) 35%,#000);filter:none}#r-who .pf-face{transition:transform .25s cubic-bezier(.3,1.4,.5,1)}#r-who:hover .pf-face{transform:scale(1.08)}",
+    "#r-who .nm{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#r-who .sw{font-size:13px;color:var(--dim);flex:none}",
+    "#r-who .dots{display:flex;gap:3px;flex:none}#r-who .dots i{width:7px;height:7px;border-radius:50%;background:var(--c);opacity:.85}",
+    "body[data-rail=one] #r-who .nm,body[data-rail=one] #r-who .dots,body[data-rail=one] #r-who .sw{display:none}body[data-rail=one] #r-who{justify-content:center;width:auto;padding:4px;background:transparent}",
+    "#whomenu{position:fixed;left:8px;bottom:52px;width:270px;background:var(--side);border:1px solid var(--line);border-radius:calc(var(--r) * 1.4);padding:8px;z-index:30;box-shadow:0 14px 40px rgba(0,0,0,.45);transform-origin:bottom left}#whomenu .key{margin-left:auto;font-size:10.5px;color:var(--dim);background:var(--raised);border-radius:4px;padding:1px 5px;font-family:inherit}",
     "#whomenu[hidden]{display:none}#whomenu:not([hidden]){animation:pfIn .22s cubic-bezier(.2,1.2,.4,1) both}",
     "@keyframes pfIn{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}",
     "#whomenu h4{margin:4px 6px 8px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}",
@@ -50,7 +53,7 @@
     "#whomenu .note{font-size:11.5px;color:var(--dim);line-height:1.35;margin:0}",
     // the swap: a circle of their color sweeps out of the button, then back into it after the reload
     "#bcswap{position:fixed;inset:0;z-index:2147483601;pointer-events:all;display:flex;align-items:center;justify-content:center}",
-    "#bcswap .wipe{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--swapc) 70%,#fff 10%),var(--swapc) 60%,color-mix(in srgb,var(--swapc) 55%,#000));clip-path:circle(0 at var(--sx) var(--sy));transition:clip-path .62s cubic-bezier(.7,0,.25,1)}",
+    "#bcswap .wipe{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--swapc) 70%,#fff 10%),var(--swapc) 60%,color-mix(in srgb,var(--swapc) 55%,#000));clip-path:circle(0 at var(--sx) var(--sy));transition:clip-path .45s cubic-bezier(.7,0,.25,1)}",
     "#bcswap.open .wipe{clip-path:circle(150vmax at var(--sx) var(--sy))}",
     "#bcswap .card{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;color:#fff;opacity:0;transform:translateY(14px) scale(.9);transition:opacity .35s ease,transform .5s cubic-bezier(.2,1.3,.4,1)}",
     "#bcswap.open .card.show{opacity:1;transform:none}",
@@ -69,15 +72,19 @@
     let b = $("r-who");
     if (!b) {
       b = document.createElement("button");
-      b.id = "r-who"; b.className = "ri who";
-      bottom.prepend(b);
+      b.id = "r-who";
+      bottom.appendChild(b); // (the very bottom: the bottom-left corner of the window)
       b.onclick = (e) => { e.stopPropagation(); toggleMenu(); };
+      // (right-click: straight back to whoever was on before, no menu)
+      b.oncontextmenu = (e) => { e.preventDefault(); const prev = lastOther(); if (prev) swapTo(prev); else toggleMenu(true); };
     }
-    const p = me(), i = list.indexOf(p);
-    b.innerHTML = '<span class="pic">' + face(p, 44) + "</span>" + (list.length > 1 ? '<i class="n">' + list.length + "</i>" : "");
-    b.title = "Using BelleCord: " + nameOf(p, i) + (list.length > 1 ? " · click to switch" : " · click to add someone");
+    const p = me(), i = list.indexOf(p), others = list.filter((x) => x !== p);
+    b.innerHTML = face(p, 26) + '<span class="nm">' + esc(nameOf(p, i)) + "</span>" + (others.length ? '<span class="dots">' + others.slice(0, 3).map((x) => '<i style="--c:' + esc(colorOf(x, list.indexOf(x))) + '"></i>').join("") + "</span>" : "") + '<span class="sw">' + (others.length ? "⇅" : "＋") + "</span>";
+    b.title = nameOf(p, i) + (others.length ? " · click to swap people (Ctrl+Shift+1 to " + list.length + "), right-click to swap back" : " · click to add someone who shares this computer");
     b.setAttribute("aria-label", b.title);
   }
+  // who was on before (remembered between swaps)
+  const lastOther = () => { try { const id = localStorage.getItem("bcPrevProfile"); return id && id !== active && list.some((x) => x.id === id) ? id : (list.find((x) => x.id !== active) || {}).id; } catch (e) { return null; } };
 
   // ---- the menu ----
   let mode = "list", editing = null;
@@ -95,7 +102,7 @@
   function drawMenu() {
     const m = $("whomenu"); if (!m) return;
     if (mode === "list") {
-      m.innerHTML = "<h4>Who's using BelleCord?</h4>" + list.map((p, i) => '<div class="row' + (p.id === active ? " on" : "") + '" role="button" tabindex="0" data-id="' + esc(p.id) + '">' + face(p, 32) + "<b>" + esc(nameOf(p, i)) + "</b>" + (p.id === active ? '<span class="ck" title="On now">✓</span>' : "<small>Switch</small>") + '<button class="ed" data-ed="' + esc(p.id) + '" title="Edit">✎</button></div>').join("") +
+      m.innerHTML = "<h4>Who's using BelleCord?</h4>" + list.map((p, i) => '<div class="row' + (p.id === active ? " on" : "") + '" role="button" tabindex="0" data-id="' + esc(p.id) + '">' + face(p, 32) + "<b>" + esc(nameOf(p, i)) + "</b>" + (p.id === active ? '<span class="ck" title="On now">✓</span>' : '<kbd class="key" title="Ctrl+Shift+' + (i + 1) + '">⌃⇧' + (i + 1) + "</kbd>") + '<button class="ed" data-ed="' + esc(p.id) + '" title="Edit">✎</button></div>').join("") +
         '<div class="sep"></div>' + (list.length < 8 ? '<button class="row add" id="pf-add"><span class="plus">+</span><b style="color:inherit">Add someone</b></button>' : "") +
         '<p class="note" style="padding:4px 8px 2px">Each person has their own Fluxer and Discord sign-ins and their own BelleCord look.</p>';
       m.querySelectorAll(".row[data-id]").forEach((r) => {
@@ -153,7 +160,7 @@
     return o;
   }
   function from(el) {
-    const r = (el || $("r-who") || document.body).getBoundingClientRect();
+    const r = ((el && el.querySelector && el.querySelector(".pf-face")) || el || document.body).getBoundingClientRect();
     return { x: Math.round(r.left + r.width / 2) + "px", y: Math.round(r.top + r.height / 2) + "px" };
   }
   async function swapTo(id, el) {
@@ -165,13 +172,13 @@
     o.querySelector(".card").innerHTML = face(p, 96) + "<b>" + esc(nameOf(p, i)) + '</b><div class="dots"><i></i><i></i><i></i></div>';
     void o.offsetWidth;
     o.classList.add("open");
-    setTimeout(() => o.querySelector(".card").classList.add("show"), still() ? 0 : 260);
-    try { sessionStorage.setItem("bcSwapTo", JSON.stringify({ id, color, at: Date.now() })); } catch {}
+    setTimeout(() => o.querySelector(".card").classList.add("show"), still() ? 0 : 180);
+    try { sessionStorage.setItem("bcSwapTo", JSON.stringify({ id, color, at: Date.now() })); localStorage.setItem("bcPrevProfile", active); } catch {}
     setTimeout(async () => {
       const r = await H.switchTo(id).catch(() => null);
       if (!r || !r.ok) { try { sessionStorage.removeItem("bcSwapTo"); } catch {} o.classList.remove("open"); o.querySelector(".card").classList.remove("show"); setTimeout(() => o.remove(), 700); }
       // (the window reloads as them, under the cover)
-    }, still() ? 50 : 720);
+    }, still() ? 50 : 480);
   }
   // after the reload: "Hi, Sam", then the circle sweeps back into the button
   function arrive() {
@@ -195,8 +202,13 @@
         o.style.pointerEvents = "none";
         setTimeout(() => o.remove(), 700);
       }, still() ? 0 : 200);
-    }, still() ? 400 : 1100);
+    }, still() ? 300 : 650);
   }
+
+  // ---- shortcuts: Ctrl+Shift+1 to 8 (Cmd+Shift on a Mac) swaps straight to that person ----
+  const byNumber = (n) => { const p = list[n - 1]; if (p && p.id !== active) swapTo(p.id); };
+  if (A.onProfileKey) A.onProfileKey(byNumber); // (while you're in Fluxer or Discord)
+  addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); byNumber(Number(e.code.slice(5))); } });
 
   // ---- start ----
   drawButton();
