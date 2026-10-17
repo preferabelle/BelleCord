@@ -92,12 +92,23 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
     }
     return out;
   }
+  // BridgeCord comes with BelleCord (app/bridgecord/): installing it needs no internet. Only a newer one than the
+  // one that came with the app is downloaded.
+  const BUNDLED = path.join(__dirname, "bridgecord");
+  const bundled = () => { try { const v = JSON.parse(fs.readFileSync(path.join(BUNDLED, "version.json"), "utf-8")); const zip = path.join(BUNDLED, "BridgeCord.zip"); return fs.existsSync(zip) ? { tag: String(v.tag || "bundled"), title: String(v.title || "BridgeCord"), zip } : null; } catch { return null; } };
+  const tagNum = (t) => Number((/^v(\d+)$/.exec(String(t || "")) || [])[1] || 0);
   async function install() {
-    const rel = await newest();
-    note = "Downloading BridgeCord " + rel.title + "...";
-    const r = await net.fetch(rel.url, { headers: { "user-agent": "BelleCord" } });
-    if (!r.ok) throw new Error("The download didn't work (" + r.status + ").");
-    const files = unzip(Buffer.from(await r.arrayBuffer())).filter((f) => f.data);
+    const b = bundled();
+    let rel = null; try { rel = await newest(); } catch (e) { if (!b) throw e; }
+    let buf;
+    if (b && (!rel || tagNum(rel.tag) <= tagNum(b.tag))) { rel = { tag: b.tag, title: b.title }; note = "Setting up " + b.title + "..."; buf = fs.readFileSync(b.zip); }
+    else {
+      note = "Downloading BridgeCord " + rel.title + "...";
+      const r = await net.fetch(rel.url, { headers: { "user-agent": "BelleCord" } });
+      if (!r.ok) { if (!b) throw new Error("The download didn't work (" + r.status + ")."); rel = { tag: b.tag, title: b.title }; buf = fs.readFileSync(b.zip); }
+      else buf = Buffer.from(await r.arrayBuffer());
+    }
+    const files = unzip(buf).filter((f) => f.data);
     // (a zip with everything inside one folder: that folder is BridgeCord)
     const tops = new Set(files.map((f) => f.name.split("/")[0]));
     const strip = tops.size === 1 && files.every((f) => f.name.includes("/")) ? [...tops][0] + "/" : "";
