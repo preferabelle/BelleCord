@@ -6,6 +6,7 @@
 <title>BelleCord</title>
 <link rel="stylesheet" href="shell.css">
 <style id="shellfont"></style>
+<script src="swapcover.js"></script>
 </head>
 <body data-mode="fluxer" data-rail="cols">
 <header id="bar">
@@ -121,11 +122,11 @@
   </section>
 
   <section class="pane site" id="fluxer" aria-label="Fluxer">
-    <webview id="wv-fluxer" src="https://web.fluxer.app/channels/@me" partition="persist:fluxer" allowpopups></webview>
+    <webview id="wv-fluxer" data-src="https://web.fluxer.app/channels/@me" data-part="fluxer" allowpopups></webview>
     <div class="fail" hidden><h2>Couldn't reach Fluxer</h2><p class="why"></p><div class="row tight failbtns"><button class="primary retry">Try again</button><button class="fxfix" title="Open Fix Fluxer on the dashboard">🔧 Fix Fluxer</button></div></div>
   </section>
   <section class="pane site" id="discord" aria-label="Discord">
-    <webview id="wv-discord" src="https://discord.com/app" partition="persist:discord" allowpopups></webview>
+    <webview id="wv-discord" data-src="https://discord.com/app" data-part="discord" allowpopups></webview>
     <div class="fail" hidden><h2>Couldn't reach Discord</h2><p class="why"></p><button class="primary retry">Try again</button></div>
   </section>
   <div id="divider" title="Drag to resize"></div>
@@ -140,6 +141,7 @@
 <div id="bcsplash" hidden><div class="hex"></div><div class="st s1"></div><div class="st s2"></div><div class="st s3"></div><div class="core"><div class="wm" id="bcswm"></div><div class="sub" id="bcspilot"></div><div class="sync" id="bcsync">SYNC RATIO 0%</div><div class="bar"><i></i></div></div></div>
 <input type="file" id="filepick" accept="image/*" hidden>
 <div id="toast" role="status"></div>
+<script src="profiles.js"></script>
 <script src="themes.js"></script>
 <script src="games.js"></script>
 <script src="rail.js"></script>
