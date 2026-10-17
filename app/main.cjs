@@ -17,29 +17,8 @@ const isGoogleSignIn = (u) => /^https:\/\/(accounts\.google\.com|accounts\.youtu
 // sign-in and helper windows of these sites stay inside the app (so the sign-in sticks); other links open in your browser
 // (fluxer.com too: Fluxer is moving its web app there from web.fluxer.app)
 const STAYS_IN = /^https:\/\/([a-z0-9-]+\.)*(fluxer\.app|fluxer\.com|fluxer\.gg|discord\.com|discord\.gg|discordapp\.com|hcaptcha\.com|accounts\.google\.com|appleid\.apple\.com)(\/|$)/i;
-// ---- people on this computer: each person has their own sign-ins (Fluxer, Discord, the side panels) and their own
-// BelleCord settings, so a shared computer can swap between them in one click. The first person ("main") keeps the
-// sign-ins that were there before; anyone added gets their own saved copies (persist:fluxer~<id> and so on). ----
-const BASES = ["fluxer", "discord", "tiktok", "pinterest", "x", "links"];
-const PANEL_BASES = ["tiktok", "pinterest", "x", "links"]; // the side panels (any website)
-const profilesFile = () => path.join(app.getPath("userData"), "profiles.json");
-let profilesMem = null;
-function profiles() {
-  if (profilesMem) return profilesMem;
-  let p = null; try { p = JSON.parse(fs.readFileSync(profilesFile(), "utf-8")); } catch {}
-  if (!p || !Array.isArray(p.list) || !p.list.length) p = { active: "main", list: [{ id: "main", name: "", color: "" }] };
-  if (!p.list.some((x) => x.id === "main")) p.list.unshift({ id: "main", name: "", color: "" });
-  if (!p.list.some((x) => x.id === p.active)) p.active = "main";
-  return (profilesMem = p);
-}
-function saveProfiles(p) { profilesMem = p; try { fs.writeFileSync(profilesFile(), JSON.stringify(p)); } catch {} }
-const suffixOf = (id) => (id && id !== "main" ? "~" + id : "");
-const partFor = (base, id = profiles().active) => "persist:" + base + suffixOf(id);
-const allParts = () => profiles().list.flatMap((x) => BASES.map((b) => partFor(b, x.id)));
-// what a partition is ("fluxer", "discord", a side panel...) and whose, from its name
-const parsePart = (part) => { const m = /^persist:([a-z]+)(?:~([a-z0-9]+))?$/.exec(String(part || "")); return m && BASES.includes(m[1]) && profiles().list.some((x) => x.id === (m[2] || "main")) ? { base: m[1], id: m[2] || "main" } : null; };
-const SES_BASE = new WeakMap(); // a session -> "fluxer" / "discord" / "tiktok"...
-const baseOfSession = (ses) => SES_BASE.get(ses) || null;
+const PARTS = ["persist:fluxer", "persist:discord", "persist:tiktok", "persist:pinterest", "persist:x", "persist:links"];
+const PANEL_PARTS = ["persist:tiktok", "persist:pinterest", "persist:x", "persist:links"]; // the side panels (any website)
 
 // (IntensiveWakeUpThrottling and AllowAggressiveThrottlingWithWebSocket off, like Fluxer's own desktop app: a side you're
 //  not looking at was slowed down until its live connection dropped. All features go in this one switch.)
@@ -53,7 +32,7 @@ let win = null;
 app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 
 // ---- your settings (look, countdown, last side): a small file in the app's own folder, never shared ----
-const prefsFile = () => path.join(app.getPath("userData"), profiles().active === "main" ? "prefs.json" : "prefs~" + profiles().active + ".json"); // (each person's own)
+const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
 let prefs = null;
 function readPrefs() { if (prefs) return prefs; try { prefs = JSON.parse(fs.readFileSync(prefsFile(), "utf-8")); } catch { prefs = {}; } return prefs; }
 function writePrefs(changes) {
@@ -66,7 +45,7 @@ ipcMain.handle("prefs:get", () => readPrefs());
 // ---- Performance (dashboard): what BelleCord is using, and the switches that make it lighter ----
 // (the graphics card switch only works from the start, so it's read here, before anything is drawn)
 try { if (readPrefs().noGpu) app.disableHardwareAcceleration(); } catch {}
-const partOfWc = (wc) => { try { const b = baseOfSession(wc.session); if (b === "fluxer" || b === "discord") return b; if (PANEL_BASES.includes(b)) return "links"; } catch {} return "app"; };
+const partOfWc = (wc) => { try { if (wc.session === session.fromPartition("persist:fluxer")) return "fluxer"; if (wc.session === session.fromPartition("persist:discord")) return "discord"; if (PANEL_PARTS.some((p) => wc.session === session.fromPartition(p))) return "links"; } catch {} return "app"; };
 ipcMain.handle("perf:usage", () => {
   const cores = Math.max(1, require("os").cpus().length);
   const byPid = new Map();
@@ -120,16 +99,16 @@ async function topApps() {
   return osTop.busy;
 }
 ipcMain.handle("perf:top", () => topApps());
-ipcMain.handle("perf:spell", (e, on) => { for (const p of allParts().filter((x) => /^persist:(fluxer|discord)\b/.test(x))) { try { session.fromPartition(p).setSpellCheckerEnabled(!!on); } catch {} } return true; });
+ipcMain.handle("perf:spell", (e, on) => { for (const p of ["persist:fluxer", "persist:discord"]) { try { session.fromPartition(p).setSpellCheckerEnabled(!!on); } catch {} } return true; });
 // lighter memory: the sites' saved copies of pictures and files (sign-ins and settings stay)
 ipcMain.handle("perf:clean", async () => {
   let freed = 0;
-  for (const p of allParts()) { try { const ses = session.fromPartition(p); freed += await ses.getCacheSize(); await ses.clearCache(); await ses.clearCodeCaches({}).catch(() => {}); } catch {} }
+  for (const p of PARTS) { try { const ses = session.fromPartition(p); freed += await ses.getCacheSize(); await ses.clearCache(); await ses.clearCodeCaches({}).catch(() => {}); } catch {} }
   return { mb: Math.round(freed / 1048576) };
 });
 ipcMain.handle("prefs:set", (e, changes) => (changes && typeof changes === "object" ? writePrefs(changes) : readPrefs()));
 // pictures (skin pictures, wallpapers, banners): one small file each, next to the settings
-const imgDir = () => path.join(app.getPath("userData"), profiles().active === "main" ? "pictures" : "pictures~" + profiles().active); // (each person's own)
+const imgDir = () => path.join(app.getPath("userData"), "pictures");
 const imgFile = (key) => path.join(imgDir(), String(key).replace(/[^a-z0-9_-]/gi, "_").slice(0, 80) + ".txt");
 ipcMain.handle("img:get", (e, key) => { try { return fs.readFileSync(imgFile(key), "utf-8"); } catch { return null; } });
 ipcMain.handle("img:set", (e, key, data) => {
@@ -163,7 +142,7 @@ const fixStore = {
 // (safety net: if the Fix Fluxer part ever fails to load, BelleCord still opens normally, just without the button's fixes)
 let fluxerFix = null, fluxerFixError = "";
 try {
-  fluxerFix = require("./fluxer-fix.cjs")({ app, session, webContents, BrowserWindow, shell, store: fixStore, partition: () => partFor("fluxer"), log: (m) => { try { console.log("[Fix Fluxer] " + m); } catch {} } });
+  fluxerFix = require("./fluxer-fix.cjs")({ app, session, webContents, BrowserWindow, shell, store: fixStore, log: (m) => { try { console.log("[Fix Fluxer] " + m); } catch {} } });
   fluxerFix.beforeReady(); // (the hosts-file workaround has to be in place before anything connects)
 } catch (e) { fluxerFix = null; fluxerFixError = String((e && e.message) || e); try { console.error("[Fix Fluxer] couldn't start: " + fluxerFixError); } catch {} }
 const fixMissing = () => ({ ok: false, restartNeeded: false, home: "https://web.fluxer.app", page: null, youDo: [], steps: [{ id: "app", label: "Fix Fluxer couldn't start in BelleCord", status: "fail", detail: fluxerFixError }], tech: "Fix Fluxer didn't load: " + fluxerFixError });
@@ -232,11 +211,11 @@ function setUp(ses) {
     cb({ requestHeaders: h });
   });
   downloads(ses);
-  if (baseOfSession(ses) === "discord") { // no passkey box popping up on its own (see discord-page.cjs)
+  if (ses === session.fromPartition("persist:discord")) { // no passkey box popping up on its own (see discord-page.cjs)
     const file = path.join(__dirname, "discord-page.cjs");
     try { if (ses.registerPreloadScript) ses.registerPreloadScript({ type: "frame", id: "bc-discord", filePath: file }); else ses.setPreloads([file]); } catch {}
   }
-  if (baseOfSession(ses) === "pinterest") {
+  if (ses === session.fromPartition("persist:pinterest")) {
     // Pinterest's "Continue with Google" can't work inside an app (Google refuses embedded sign-in). Its button and
     // pop-up are stopped here, and the app tells you to use the QR code or your email instead.
     ses.webRequest.onBeforeRequest({ urls: ["https://accounts.google.com/gsi/*", "https://accounts.google.com/o/oauth2/*", "https://accounts.google.com/signin/*", "https://accounts.google.com/v3/signin/*"] }, (d, cb) => {
@@ -317,16 +296,14 @@ app.on("web-contents-created", (e, wc) => {
   if (wc.getType() !== "webview") return;
   // Ctrl+1 to Ctrl+4 switch sides even while you're typing inside Fluxer or Discord
   wc.on("before-input-event", (ev, input) => {
-    // Ctrl+Shift+1 to 8 (Cmd+Shift on a Mac): swap to that person on this computer
-    if (input.type === "keyDown" && (MAC ? input.meta : input.control) && input.shift && !input.alt && /^Digit[1-8]$/.test(input.code || "") && win) { ev.preventDefault(); win.webContents.send("profile-key", Number(input.code.slice(5))); }
     if (input.type === "keyDown" && (MAC ? input.meta : input.control) && !input.alt && !input.shift && /^[1-4]$/.test(input.key) && win) { ev.preventDefault(); win.webContents.send("switch", Number(input.key)); }
     // Alt+Left and Alt+Right (Cmd+[ and Cmd+] on a Mac): back and forward through the places you've been
     const back = MAC ? input.meta && input.key === "[" : input.alt && !input.control && input.key === "ArrowLeft";
     const fwd = MAC ? input.meta && input.key === "]" : input.alt && !input.control && input.key === "ArrowRight";
     if (input.type === "keyDown" && (back || fwd) && win) { ev.preventDefault(); win.webContents.send("nav", back ? "back" : "forward"); }
   });
-  const inPanel = () => { try { return PANEL_BASES.includes(baseOfSession(wc.session)); } catch { return false; } };
-  const inPinterest = () => { try { return baseOfSession(wc.session) === "pinterest"; } catch { return false; } };
+  const inPanel = () => { try { return PANEL_PARTS.some((p) => wc.session === session.fromPartition(p)); } catch { return false; } };
+  const inPinterest = () => { try { return wc.session === session.fromPartition("persist:pinterest"); } catch { return false; } };
   wc.setWindowOpenHandler(({ url }) => {
     if (isGoogleSignIn(url) && inPinterest()) { tellShell("pinterest-google"); return { action: "deny" }; }
     if (STAYS_IN.test(url) || isGoogleSignIn(url) || (inPanel() && /^https:\/\//i.test(url) && sameSite(wc, url))) return { action: "allow", overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, backgroundColor: "#313338", ...withIcon() } };
@@ -354,10 +331,9 @@ function open() {
     prefs2.nodeIntegration = false;
     prefs2.contextIsolation = true;
     prefs2.sandbox = true;
-    const src = params.src || "", pp = parsePart(params.partition), base = pp && pp.base;
-    if (pp) setUpPart(params.partition); // (a person added since BelleCord opened)
-    const ok = !!pp && (PANEL_BASES.includes(base) ? /^https:\/\//i.test(src) : (base === "fluxer" && /^https:\/\/([a-z0-9-]+\.)*fluxer\.(app|com)\//i.test(src)) || (base === "discord" && /^https:\/\/([a-z0-9-]+\.)*discord\.com\//i.test(src)));
-    if (base === "fluxer" || base === "discord") prefs2.backgroundThrottling = false; // (each side stays connected while it's out of sight)
+    const src = params.src || "", part = params.partition;
+    const ok = PANEL_PARTS.includes(part) ? /^https:\/\//i.test(src) : (part === "persist:fluxer" && /^https:\/\/([a-z0-9-]+\.)*fluxer\.(app|com)\//i.test(src)) || (part === "persist:discord" && /^https:\/\/([a-z0-9-]+\.)*discord\.com\//i.test(src));
+    if (part === "persist:fluxer" || part === "persist:discord") prefs2.backgroundThrottling = false; // (each side stays connected while it's out of sight)
     if (!ok) e.preventDefault();
   });
   win.webContents.on("will-navigate", (e) => e.preventDefault()); // the app's own page never turns into a website
@@ -370,76 +346,18 @@ function open() {
   win.loadFile(SHELL);
 }
 
-// a partition's session gets set up once (the same setup for every person's copy)
-const setUpDone = new Set();
-function setUpPart(part) {
-  if (setUpDone.has(part)) return;
-  const pp = parsePart(part); if (!pp) return;
-  setUpDone.add(part);
-  const ses = session.fromPartition(part);
-  SES_BASE.set(ses, pp.base);
-  setUp(ses);
-  try { if (pp.base === "fluxer" || pp.base === "discord") ses.setSpellCheckerEnabled(!readPrefs().noSpell); } catch {}
-}
-// ---- swapping people ----
-const pub = () => { const p = profiles(); return { active: p.active, suffix: suffixOf(p.active), list: p.list.map((x) => ({ id: x.id, name: x.name || "", color: x.color || "", pic: x.pic || "" })) }; };
-ipcMain.on("profiles:now", (e) => { e.returnValue = pub(); });
-ipcMain.handle("profiles:get", () => pub());
-ipcMain.handle("profiles:add", (e, a) => {
-  const p = profiles();
-  if (p.list.length >= 8) return { error: "That's the most people BelleCord can hold (8)." };
-  const id = Date.now().toString(36).slice(-6) + Math.random().toString(36).slice(2, 5);
-  p.list.push({ id, name: String((a && a.name) || "").trim().slice(0, 24), color: /^#[0-9a-f]{6}$/i.test((a && a.color) || "") ? a.color : "" });
-  saveProfiles(p);
-  for (const b of BASES) setUpPart(partFor(b, id));
-  // (their name is already known, so BelleCord doesn't ask it again the first time)
-  try { const nm = p.list.find((x) => x.id === id).name; if (nm) fs.writeFileSync(path.join(app.getPath("userData"), "prefs~" + id + ".json"), JSON.stringify({ pilotName: nm })); } catch {}
-  return { ok: true, id, ...pub() };
-});
-ipcMain.handle("profiles:edit", (e, a) => {
-  const p = profiles(), x = p.list.find((y) => y.id === (a && a.id));
-  if (!x) return { error: "not found" };
-  if (a.name !== undefined) x.name = String(a.name || "").trim().slice(0, 24);
-  if (a.color !== undefined) x.color = /^#[0-9a-f]{6}$/i.test(a.color || "") ? a.color : "";
-  if (a.pic !== undefined) x.pic = /^data:image\/(png|jpeg|webp|gif);base64,/.test(a.pic || "") && a.pic.length < 400000 ? a.pic : "";
-  saveProfiles(p);
-  return { ok: true, ...pub() };
-});
-// switching: everything is written to disk first, then the window reloads as the other person
-ipcMain.handle("profiles:switch", (e, id) => {
-  const p = profiles();
-  if (!p.list.some((x) => x.id === id) || p.active === id) return { ok: false };
-  flushAll();
-  p.active = id; saveProfiles(p);
-  prefs = null; // (the next read is that person's settings)
-  for (const b of BASES) setUpPart(partFor(b, id));
-  setTimeout(() => { try { if (win) win.webContents.reload(); } catch {} }, 60);
-  return { ok: true };
-});
-// removing someone signs them out everywhere in BelleCord and forgets their settings (never the first person)
-ipcMain.handle("profiles:remove", async (e, id) => {
-  const p = profiles();
-  if (id === "main" || !p.list.some((x) => x.id === id)) return { error: "can't" };
-  if (p.active === id) return { error: "Switch to someone else first." };
-  for (const b of BASES) { try { await session.fromPartition(partFor(b, id)).clearStorageData(); } catch {} }
-  try { fs.unlinkSync(path.join(app.getPath("userData"), "prefs~" + id + ".json")); } catch {}
-  try { fs.rmSync(path.join(app.getPath("userData"), "pictures~" + id), { recursive: true, force: true }); } catch {}
-  p.list = p.list.filter((x) => x.id !== id); saveProfiles(p);
-  return { ok: true, ...pub() };
-});
-
 app.whenReady().then(async () => {
   // Mac: the menu bar (copy, paste, undo and quitting need it there)
   if (MAC) Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]));
   // Fix Fluxer's saved settings (and a quick check that secure DNS, if it's on, still works on this network)
   if (fluxerFix) { try { await Promise.race([fluxerFix.afterReady().catch(() => {}), new Promise((r) => setTimeout(r, 4000))]); } catch {} }
   setUp(session.defaultSession);
-  for (const p of allParts()) setUpPart(p);
+  for (const p of PARTS) setUp(session.fromPartition(p));
   makeTray();
   open();
 });
 // sign-ins are written to disk often and before quitting (Discord forgot you when the app closed before it did)
-function flushAll() { for (const p of allParts()) { try { const ses = session.fromPartition(p); ses.flushStorageData(); ses.cookies.flushStore().catch(() => {}); } catch {} } }
+function flushAll() { for (const p of PARTS) { try { const ses = session.fromPartition(p); ses.flushStorageData(); ses.cookies.flushStore().catch(() => {}); } catch {} } }
 setInterval(flushAll, 60000);
 let quitting = false;
 app.on("before-quit", () => { quitting = true; flushAll(); });
