@@ -18,8 +18,6 @@
     w.setAttribute("src", w.dataset.src);
   }
 
-  // (sharing BelleCord between people comes in Update 14: until then only the sign-ins above are set up)
-  if (true) { window.bcProfiles = { open() {}, swapTo() {} }; return; }
   const COLORS = ["#ff6fa5", "#5865f2", "#23a55a", "#f0b232", "#e0301e", "#00b8d9", "#9b59b6", "#ff8a3d"];
   let list = now.list || [], active = now.active || "main";
   const colorOf = (p, i) => (p && p.color) || COLORS[(i < 0 ? 0 : i) % COLORS.length];
