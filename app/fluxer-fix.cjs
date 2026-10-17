@@ -90,14 +90,14 @@ const PAGE_PROBE = "(" + function () {
  */
 module.exports = function createFluxerFix(o) {
   const { app, session, webContents, BrowserWindow, shell, store } = o;
-  const partitionOf = () => (typeof o.partition === "function" ? o.partition() : o.partition) || "persist:fluxer"; // (the person who's on now)
+  const partition = o.partition || "persist:fluxer";
   const log = o.log || (() => {});
   const helpLine = o.helpLine === undefined ? "send me a screenshot of this box" : o.helpLine;
   const https = o.https || require("https");
   const bootWait = o.bootWaitMs || 20000; // (how long Fluxer gets to start after its page loads)
   const S = () => { try { return store.get() || {}; } catch { return {}; } };
   const save = (ch) => { try { store.set(ch); } catch {} };
-  const fses = () => session.fromPartition(partitionOf());
+  const fses = () => session.fromPartition(partition);
   const home = () => (isHome(S().home) ? String(S().home).replace(/\/+$/, "") : HOMES[0]);
   let busy = null;
   // your normal browser (the one links open in), by name: on most Windows computers, Microsoft Edge
@@ -577,7 +577,7 @@ module.exports = function createFluxerFix(o) {
   // Fluxer on its own, with none of BelleCord's changes (tells whether BelleCord's look is what breaks it)
   function openClean() {
     try {
-      const w = new BrowserWindow({ width: 1200, height: 860, title: "Fluxer (clean test)", autoHideMenuBar: true, backgroundColor: "#313338", webPreferences: { partition: partitionOf(), contextIsolation: true, sandbox: true } });
+      const w = new BrowserWindow({ width: 1200, height: 860, title: "Fluxer (clean test)", autoHideMenuBar: true, backgroundColor: "#313338", webPreferences: { partition, contextIsolation: true, sandbox: true } });
       w.loadURL(home() + "/channels/@me");
       return { ok: true };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
