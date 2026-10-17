@@ -2,6 +2,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("bcApp", {
   platform: process.platform,
+  // who's using BelleCord right now (each person has their own sign-ins and settings)
+  profile: (() => { try { return ipcRenderer.sendSync("profiles:now"); } catch (e) { return { active: "main", suffix: "", list: [] }; } })(),
+  profiles: {
+    get: () => ipcRenderer.invoke("profiles:get"),
+    add: (a) => ipcRenderer.invoke("profiles:add", { name: String((a && a.name) || ""), color: String((a && a.color) || "") }),
+    edit: (a) => ipcRenderer.invoke("profiles:edit", { id: String((a && a.id) || ""), name: a && a.name, color: a && a.color, pic: a && a.pic }),
+    switchTo: (id) => ipcRenderer.invoke("profiles:switch", String(id || "")),
+    remove: (id) => ipcRenderer.invoke("profiles:remove", String(id || "")),
+  },
   getPrefs: () => ipcRenderer.invoke("prefs:get"),
   getImg: (key) => ipcRenderer.invoke("img:get", key),
   setImg: (key, data) => ipcRenderer.invoke("img:set", key, data),
