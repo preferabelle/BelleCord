@@ -40,7 +40,7 @@ body[data-rail=one] #rail .top{flex-direction:column;gap:10px}body[data-rail=one
 #rail .sep.wide{margin:0 14px 8px}
 #rail .scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 #rail .scroll::-webkit-scrollbar{display:none}
-#rail .cols{display:flex;padding:2px 6px 8px}
+#rail .cols{display:flex;padding:7px 6px 8px}
 #rail .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
 #rail .wall{width:4px;margin:2px 2px;border-radius:2px;background:linear-gradient(var(--fx),var(--dc));flex:none;opacity:.85}
 body[data-rail=one] #rail .cols{flex-direction:column;align-items:center}
@@ -456,3 +456,6 @@ body[data-motion=ultra] .hero .herotext{transform:translate3d(calc(var(--hx) * .
 .pilotcard h2{margin:6px 0;color:#fff}.pilotcard p{color:#b5bac1;margin:0 0 12px}
 .gbpilot{display:flex;align-items:center;gap:12px;margin:10px 0}.gbpilot>div{flex:1}.gbpilot .gb{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:none}.gbpilot .gb.locked{background:var(--raised);font-size:14px}
 .ownercard{background:radial-gradient(circle at 50% 0%,#d4a01755,transparent 70%)}.ownercard .pbig{background:linear-gradient(135deg,#ffe08a,#d4a017 55%,#6b4e05);box-shadow:0 8px 30px #d4a01766}
+
+/* Update 12: the groups of pre-made themes */
+.tplgroups{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.tplgroups .tg{font-size:13px;padding:5px 12px;border-radius:999px;background:var(--side)}.tplgroups .tg small{color:var(--dim);font-size:11px;margin-left:2px}.tplgroups .tg.on{background:var(--accent);color:var(--onaccent)}.tplgroups .tg.on small{color:inherit;opacity:.75}
