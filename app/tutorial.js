@@ -120,20 +120,29 @@
 
   // ---------------- tours: a short tutorial for just one update (from its "▶ Take the tour" in What's new) ----------------
   const clickIf = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
-  const openThemes = () => { showSec("s-theme"); setTimeout(() => { const w = $("tplwrap"); if (w && w.hidden) clickIf("#tpl-toggle"); }, 300); };
+  const openThemes = () => { showSec("s-theme"); setTimeout(() => { const w = $("tplwrap"); if (w && w.hidden) clickIf("#tpl-toggle"); else if (w) w.scrollIntoView({ block: "start" }); }, 300); };
   const rowOf = (sel) => { const el = document.querySelector(sel); return el && el.closest(".prow"); };
   const TOURS = {
+    13: { name: "Update 13", steps: () => [
+      { title: "Update 13: share BelleCord", xp: 0, text: () => "One computer, a few people? Everyone can have their own BelleCord now: their own Fluxer and Discord sign-ins, their own look, their own badges. Swapping is one click." },
+      { at: "#r-who", title: "Who's using BelleCord", xp: 50, before: () => { const m = $("whomenu"); if (m) m.hidden = true; }, text: () => "This round button at the bottom of your servers is you. Click it to see everyone on this computer.",
+        try: { what: "Click it", done: () => { const m = $("whomenu"); return !!m && !m.hidden; } } },
+      { at: "#whomenu", title: "Swap in one click", xp: 50, before: () => { if (window.bcProfiles) window.bcProfiles.open(); }, text: () => "Click someone to swap to them. <b>Add someone</b> makes a new person (they sign in once, then it remembers). <b>✎</b> changes a name, color or picture." },
+      { at: "#pieces", title: "Theme studio, in tabs", xp: 50, before: () => { const m = $("whomenu"); if (m) m.hidden = true; showSec("s-theme"); setTimeout(() => { clickIf('#pieces [data-ptab="colors"]'); const r = $("pieces"); if (r) r.scrollIntoView({ block: "center" }); }, 300); },
+        text: () => "Colors, Background, Font, Cursor, Effects and Layout each have a tab now, with a little picture of every choice. Hover one to try it, click to keep it." },
+      { title: "That's Update 13", end: true, xp: 50, text: () => "Your sign-ins stay yours. Nobody else's account shows up unless you swap to them." },
+    ] },
     12: { name: "Update 12", steps: () => [
       { title: "Update 12: the theme pack", xp: 0, text: () => "This update is all about making BelleCord look like <i>you</i>: 39 new themes in groups, cursors, effects, backgrounds, fonts and colors. Let's look." },
-      { at: "#s-theme", title: "Theme studio", xp: 25, before: openThemes, text: () => "Everything lives here. The pre-made themes are open now (the 🎨 button opens and closes them)." },
+      { at: "#s-theme", title: "Theme studio", xp: 25, before: openThemes, text: () => "Everything lives here: make your own look with the tabs, and the pre-made themes are at the end." },
       { at: "#tpl-groups", title: "Themes in groups", xp: 50, before: openThemes, text: () => "Classic, Games, Anime, Soulbound and Moods. Pick a group to see just those.",
         try: { what: "Pick any group", done: () => { const on = document.querySelector("#tpl-groups .tg.on"); return !!on && on.dataset.tg !== "all"; } } },
       { at: "#templates", title: "osu!", xp: 100, before: () => { openThemes(); setTimeout(() => clickIf('#tpl-groups [data-tg="games"]'), 450); },
         text: () => "The full osu! look: hit circles behind the chat, the Exo font, and an osu! circle cursor. <b>osu!lazer</b> is the newer look with triangles. Hover a theme to preview it (and its cursor).",
         try: { what: "Put on osu! or osu!lazer", done: () => /osu!/.test(($("theme-now") || {}).textContent || "") } },
-      { at: "#pieces", title: "Cursors", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { const r = rowOf('#pieces [data-cat="cursor"]'); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => rowOf('#pieces [data-cat="cursor"]'),
-        text: () => "A whole new row: 22 cursors, drawn in your theme's colors, on Fluxer, Discord and here. Anywhere you type keeps the normal text cursor." },
-      { at: "#pieces", title: "New effects", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { const r = rowOf('#pieces [data-fx="grain"]'); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => rowOf('#pieces [data-fx="grain"]'),
+      { at: "#pieces", title: "Cursors", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { clickIf('#pieces [data-ptab="cursor"]'); const r = document.querySelector("#pieces .ppane"); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => document.querySelector("#pieces .ppane"),
+        text: () => "A whole tab of cursors, drawn in your theme's colors, on Fluxer, Discord and here. Anywhere you type keeps the normal text cursor." },
+      { at: "#pieces", title: "New effects", xp: 50, before: () => { showSec("s-theme"); setTimeout(() => { clickIf('#pieces [data-ptab="fx"]'); const r = document.querySelector("#pieces .ppane"); if (r) r.scrollIntoView({ block: "center" }); }, 300); }, target: () => document.querySelector("#pieces .ppane"),
         text: () => "<b>Film grain</b>, <b>Vignette</b> (darker edges) and <b>Neon names</b> (everyone's name glows in its own color). Mix them with anything." },
       { at: "#theme-surprise", tip: true, title: "Feeling lucky?", xp: 25, before: () => showSec("s-theme"), text: () => "<b>🎲 Surprise me</b> can pick a cursor now too. <b>Start over</b> undoes everything." },
       { title: "That's Update 12", end: true, xp: 50, text: () => "Have fun dressing it up." },
