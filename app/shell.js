@@ -470,6 +470,8 @@
   let miniWall = null;
   let themeQuery = ""; // what's typed in the theme search box
   let tplGroup = "all"; // which group of pre-made themes is showing
+  let pieceTab = null, colorGroup = "all"; // which tab of the theme pieces is open, and which colors are showing
+  const shownFonts = new Set(); // (fonts loaded for the Font tab's tiles)
   function mini(stack) {
     const t = T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(curSide()).color) });
     const r = (T.CORNERS[stack.corners] || {}).r ?? 8, F = T.FONTS[stack.font], fx = new Set(stack.effects || []);
@@ -488,7 +490,9 @@
   function showMini(stack) { setHtml($("mini"), mini(stack || P("theme"))); }
   function paintStudio() {
     const stack = P("theme");
-    { const open = !!P("tplOpen"), n = (P("myThemes") || []).length, tb = $("tpl-toggle"), w = $("tplwrap");
+    if (!pieceTab) pieceTab = P("pieceTab") || "colors";
+    if (!$("tilefonts")) { const st = document.createElement("style"); st.id = "tilefonts"; document.head.appendChild(st); }
+    { const open = P("tplOpen") !== false, n = (P("myThemes") || []).length, tb = $("tpl-toggle"), w = $("tplwrap");
       if (w) w.hidden = !open;
       if (tb) { tb.textContent = "🎨 " + (n ? "Saved & pre-made themes" : "Pre-made themes") + (open ? " ▾" : " ▸"); tb.classList.toggle("on", open); tb.setAttribute("aria-expanded", String(open)); } }
     showMini(stack);
@@ -518,26 +522,53 @@
       await setTheme(pieces);
       toast(tp.name);
     }));
-    const optOf = (cat, k, o) => {
-      let sw = "";
-      if (cat.key === "palette") { const t = o.own ? fxColors || {} : o; const fr = esc(t.frame || t.chat || "#555"), ch = esc(t.chat || "#555"), ac = esc(t.accent || "#999"); sw = '<span class="sw sw3" style="background:linear-gradient(135deg,' + fr + " 0 38%," + ch + " 38% 70%," + ac + ' 70%)"></span>'; }
-      if (cat.key === "background" && k !== "none" && k !== "wallpaper") { const L = T.bgLayer({ background: k, effects: [] }, T.tokens(stack, { fluxer: fxColors }), {}); sw = '<span class="sw" style="' + esc("background:" + (L ? L.css : "none") + ";background-color:" + T.tokens(stack, { fluxer: fxColors }).chat) + '"></span>'; }
-      if (cat.key === "font" && o.stack) return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '" style="font-family:' + esc(o.stack) + '">' + esc(o.name) + "</button>";
-      return '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '">' + sw + esc(o.name) + "</button>";
-    };
-    // the colors: Fluxer's own on the Colors row, then a Dark row and a Light row under it, labeled in the same
-    // column as every other row (each group in color order, see themes.js)
-    const sub = (cat, icon, label, keys) => (keys.length ? '<div class="prow sub"><b><span class="ico" aria-hidden="true">' + icon + "</span>" + label + '</b><div class="popts">' + keys.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" : "");
-    const paletteRows = (cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + T.PALETTE_GROUPS.own.map((k) => optOf(cat, k, cat.set[k])).join("") + "</div></div>" + sub(cat, "🌙", "Dark", T.PALETTE_GROUPS.dark) + sub(cat, "☀️", "Light", T.PALETTE_GROUPS.light);
-    const rows = T.CATS.map((cat) => (cat.key === "palette" && T.PALETTE_GROUPS ? paletteRows(cat) : '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + Object.entries(cat.set).map(([k, o]) => optOf(cat, k, o)).join("") + "</div></div>")).join("") +
-      '<div class="prow"><b>Effects</b><div class="popts">' + Object.entries(T.EFFECTS).map(([k, o]) => '<button class="popt' + ((stack.effects || []).includes(k) ? " on" : "") + '" data-fx="' + k + '" title="' + esc(o.hint) + '">' + esc(o.name) + "</button>").join("") + "</div></div>";
-    setHtml($("pieces"), rows);
+    // the pieces, in tabs (Colors, Background, Font, Cursor, Effects, Layout): each a grid of tiles you can see before
+    // you pick. Hover anything to try it in the preview, click to keep it.
+    const t0 = T.tokens(stack, { fluxer: fxColors });
+    const BG_ICON = { flamecheck: "🔥", thunderscales: "⚡", reiatsu: "💢", nixie: "🔢", wall: "🏰", aura: "💚", madmoon: "🌕", notebook: "📓", chainsaw: "🪚", elementorbs: "🌀", cleave: "🗡", hollowpurple: "🟣", none: "🚫", wallpaper: "🖼", stars: "⭐", petals: "🌸", leaves: "🍃", waves: "🌊", grid: "🌆", dots: "🎊", embers: "🔥", damask: "⚜️", aurora: "🌌", bokeh: "🫧", honeycomb: "🐝", rain: "🌧", mesh: "🎨", osucircles: "🎯", osutriangles: "🔺", checker: "🏁", nebula: "🌠", snow: "❄️", fireflies: "✨", magic: "🔮", moon: "🌙", circuit: "🔌", crystals: "💎", wisps: "👻", gold: "🪙", abyssrings: "🕳", pixels: "👾", streaks: "⚡", void: "⚫", sparks: "🔨", bricks: "🧱", roots: "🌱", marks: "🩸", sun: "🌅", hearts: "💗", seigaiha: "🌊", uroko: "⚡", butterflies: "🦋", wisteria: "💜", hinokami: "☀️", domain: "🌀", blackflash: "⚡", cursedflames: "🔥", getsuga: "🌙", reishi: "💫", ripples: "💧", gleam: "⚔️" };
+
+    const tile = (attrs, on, inner, name, sub, style) => '<button class="ptile' + (on ? " on" : "") + '" ' + attrs + (style ? ' style="' + esc(style) + '"' : "") + ">" + inner + "<b>" + esc(name) + "</b>" + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</button>";
+    const chips = (cur, list, attr) => '<div class="pchips">' + list.map(([k, label]) => '<button data-' + attr + '="' + k + '"' + (k === cur ? ' class="on"' : "") + ">" + esc(label) + "</button>").join("") + "</div>";
+    const nice = (n) => (n === "As the site has it" ? "Normal" : n);
+    let pane = "";
+    if (pieceTab === "colors") {
+      const gOf = (k, p) => (p.own ? "classic" : p.dark === false ? "light" : (T.PALETTE_GROUP || {})[k] || "classic");
+      const keys = Object.keys(T.PALETTES).filter((k) => colorGroup === "all" || gOf(k, T.PALETTES[k]) === colorGroup || (colorGroup !== "light" && T.PALETTES[k].own));
+      pane = chips(colorGroup, [["all", "All"], ["classic", "Classic"], ["games", "Games"], ["anime", "Anime"], ["soulbound", "Soulbound"], ["moods", "Moods"], ["light", "Light"]], "cg") + '<div class="ptiles" style="--tw:132px">' + keys.map((k) => {
+        const p = T.PALETTES[k], t = p.own ? (fxColors || T.PALETTES.discord) : p;
+        const v = "--f:" + t.frame + ";--p:" + t.panel + ";--c:" + t.chat + ";--a:" + t.accent + ";--l:" + (t.link || t.accent) + ";--t:" + t.text + ";--m:" + t.muted;
+        return tile('data-cat="palette" data-k="' + k + '"', stack.palette === k, '<div class="pal" style="' + esc(v) + '"><div class="p"><u class="a"></u><u></u><u></u></div><div class="c"><s class="l"></s><s></s><s style="width:70%"></s><em></em></div></div>', p.own ? "Fluxer's own" : p.name, "");
+      }).join("") + "</div>";
+    } else if (pieceTab === "bg") {
+      pane = '<div class="ptiles" style="--tw:140px">' + Object.entries(T.BACKGROUNDS).map(([k, b]) => {
+        const L = k === "wallpaper" ? null : T.bgLayer({ ...stack, background: k, effects: [] }, t0, {});
+        const inner = '<div class="bgp" style="' + esc((L ? "background:" + L.css + (L.size ? ";background-size:" + L.size : "") + (L.anim ? ";animation:" + L.anim : "") + ";" : "") + "background-color:" + t0.chat) + '"><span class="bgi">' + (BG_ICON[k] || "🖼") + "</span></div>";
+        return tile('data-cat="background" data-k="' + k + '"', stack.background === k, inner, b.name, "");
+      }).join("") + "</div>";
+    } else if (pieceTab === "font") {
+      pane = '<div class="ptiles" style="--tw:160px">' + Object.entries(T.FONTS).map(([k, f]) => tile('data-cat="font" data-k="' + k + '"', stack.font === k, '<div class="fontp"' + (f.stack ? ' style="font-family:' + esc(f.stack) + '"' : "") + "><span>Aa Bb</span><em>are you coming tonight?</em></div>", nice(f.name), "")).join("") + "</div>";
+    } else if (pieceTab === "cursor") {
+      pane = '<div class="ptiles" style="--tw:104px">' + Object.entries(T.CURSORS || {}).map(([k, c]) => {
+        const u = c.url ? c.url(t0) : null, img = u ? (u.match(/^url\("([^"]+)"\)/) || [])[1] : null;
+        return tile('data-cat="cursor" data-k="' + k + '"', (stack.cursor || "site") === k, '<div class="curp">' + (img ? '<img src="' + esc(img) + '" alt="">' : '<span style="font-size:22px">🖱</span>') + "</div>", nice(c.name), "", u ? "cursor:" + u + ",pointer" : "");
+      }).join("") + "</div>";
+    } else if (pieceTab === "fx") {
+      const ICON = { rainbow: "🌈", glitch: "👾", ring: "⭕", outline: "🔲", tint: "🎨", pulse: "💓", sparkles: "✨", glass: "🧊", glow: "💡", bubbles: "💬", shadows: "🌓", scanlines: "📺", drift: "🌊", grain: "🎞", vignette: "🔦", neon: "💖" };
+      pane = '<div class="ptiles" style="--tw:150px">' + Object.entries(T.EFFECTS).map(([k, o]) => tile('data-fx="' + k + '"', (stack.effects || []).includes(k), '<div class="fxp">' + (ICON[k] || "✨") + "</div>", o.name, o.hint)).join("") + "</div>";
+    } else {
+      pane = '<div class="play">' + T.CATS.filter((c) => ["corners", "size", "spacing"].includes(c.key)).map((cat) => '<div class="prow"><b>' + esc(cat.name) + '</b><div class="popts">' + Object.entries(cat.set).map(([k, o]) => '<button class="popt' + (stack[cat.key] === k ? " on" : "") + '" data-cat="' + cat.key + '" data-k="' + k + '">' + esc(nice(o.name)) + "</button>").join("") + "</div></div>").join("") + "</div>";
+    }
+    const TABS = [["colors", "🌈", "Colors"], ["bg", "🖼", "Background"], ["font", "🔤", "Font"], ["cursor", "🖱", "Cursor"], ["fx", "✨", "Effects"], ["layout", "📐", "Layout"]];
+    setHtml($("pieces"), '<div class="ptabs" role="tablist">' + TABS.map(([k, ic, label]) => '<button role="tab" data-ptab="' + k + '"' + (k === pieceTab ? ' class="on" aria-selected="true"' : "") + "><span>" + ic + "</span>" + label + "</button>").join("") + '</div><div class="ppane">' + pane + "</div>");
+    $("pieces").querySelectorAll("[data-ptab]").forEach((b) => (b.onclick = () => { pieceTab = b.dataset.ptab; save({ pieceTab }); paintStudio(); }));
+    $("pieces").querySelectorAll("[data-cg]").forEach((b) => (b.onclick = () => { colorGroup = b.dataset.cg; paintStudio(); }));
+    if (pieceTab === "font") (async () => { for (const k of Object.keys(T.FONTS)) { if (pieceTab !== "font") return; const f = await fontCss(k); if (f && !shownFonts.has(k)) { shownFonts.add(k); $("tilefonts").textContent += f; } } })();
     $("pieces").querySelectorAll("[data-cat]").forEach((b) => { b.onclick = () => setTheme({ [b.dataset.cat]: b.dataset.k }); b.onmouseenter = () => showMini({ ...P("theme"), [b.dataset.cat]: b.dataset.k }); b.onmouseleave = () => showMini(); });
     $("pieces").querySelectorAll("[data-fx]").forEach((b) => { b.onmouseenter = () => { const f = new Set(P("theme").effects || []); f.has(b.dataset.fx) ? f.delete(b.dataset.fx) : f.add(b.dataset.fx); showMini({ ...P("theme"), effects: [...f] }); }; b.onmouseleave = () => showMini(); });
     $("pieces").querySelectorAll("[data-fx]").forEach((b) => (b.onclick = () => { const fx = new Set(P("theme").effects || []); fx.has(b.dataset.fx) ? fx.delete(b.dataset.fx) : fx.add(b.dataset.fx); setTheme({ effects: [...fx] }); }));
   }
   $("keep-colors").onchange = (e) => save({ keepColors: e.target.checked });
-  if ($("tpl-toggle")) $("tpl-toggle").onclick = async () => { await save({ tplOpen: !P("tplOpen") }); paintStudio(); };
+  if ($("tpl-toggle")) $("tpl-toggle").onclick = async () => { const opening = P("tplOpen") === false; await save({ tplOpen: opening }); paintStudio(); if (opening && $("tplwrap")) setTimeout(() => $("tplwrap").scrollIntoView({ behavior: "smooth", block: "start" }), 50); };
   $("theme-save").onclick = async () => { const name = $("theme-name").value.trim(); if (!name) return toast("Give your theme a name first."); await save({ myThemes: [{ id: uid(), name, pieces: { ...P("theme"), effects: [...(P("theme").effects || [])] } }, ...(P("myThemes") || [])] }); $("theme-name").value = ""; paintStudio(); toast("Saved"); };
   $("theme-reset").onclick = () => setTheme({ ...T.DEFAULT_STACK });
   $("tpl-search").oninput = (e) => { themeQuery = e.target.value; paintStudio(); };
@@ -550,12 +581,13 @@
   };
 
   // ---------------- quick links: TikTok, Pinterest, X, and yours ----------------
+  const SFX = (window.bcApp && window.bcApp.profile && window.bcApp.profile.suffix) || ""; // (each person on this computer has their own sign-ins)
   const BUILTIN = [
-    { id: "tiktok", name: "TikTok", letter: "T", url: "https://www.tiktok.com/", part: "persist:tiktok" },
-    { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" },
-    { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" },
+    { id: "tiktok", name: "TikTok", letter: "T", url: "https://www.tiktok.com/", part: "persist:tiktok" + SFX },
+    { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" + SFX },
+    { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" + SFX },
   ];
-  const allLinks = () => [...BUILTIN, ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" }))];
+  const allLinks = () => [...BUILTIN, ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
   const panels = new Map();
   let openId = null;
   function drawLinks() {
