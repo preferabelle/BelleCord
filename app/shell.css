@@ -498,3 +498,14 @@ body[data-motion=ultra] .hero .herotext{transform:translate3d(calc(var(--hx) * .
 @keyframes bcPulseM{0%,100%{box-shadow:none}50%{box-shadow:0 0 14px color-mix(in srgb,var(--ma) 60%,transparent),inset 0 0 0 1px var(--ma)}}.mapp.fx-pulse .mside .sel{animation:bcPulseM 2.6s ease-in-out infinite}
 .mcap{margin-top:6px;font-size:12px;color:var(--dim);text-align:center}.mcap b{color:var(--strong)}
 .tpz .mapp{height:236px!important;box-shadow:none}
+
+/* using only Fluxer or only Discord: the server list is one slim column (there's nothing to put side by side) */
+body[data-only]{--railw:78px}
+body[data-only] #rail .top{flex-direction:column;gap:10px}
+body[data-only] #rail .top .mid{display:none}
+body[data-only] #rail .cols{flex-direction:column;align-items:center}
+body[data-only] #rail .wall{width:32px;height:4px;margin:8px auto;flex:none}
+body[data-only] #rail .col{flex:none}
+body[data-only] .layoutsw [data-rail=one]{background:var(--raised);color:var(--strong)}
+body[data-only] .layoutsw button{padding:4px 4px}
+body[data-only] .layoutsw{display:none!important}

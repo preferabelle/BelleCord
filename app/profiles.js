@@ -18,8 +18,6 @@
     w.setAttribute("src", w.dataset.src);
   }
 
-  // (sharing BelleCord between people comes in Update 14: until then only the sign-ins above are set up)
-  if (true) { window.bcProfiles = { open() {}, swapTo() {} }; return; }
   const COLORS = ["#ff6fa5", "#5865f2", "#23a55a", "#f0b232", "#e0301e", "#00b8d9", "#9b59b6", "#ff8a3d"];
   let list = now.list || [], active = now.active || "main";
   const colorOf = (p, i) => (p && p.color) || COLORS[(i < 0 ? 0 : i) % COLORS.length];
@@ -38,6 +36,7 @@
     "#r-who .nm{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#r-who .sw{font-size:13px;color:var(--dim);flex:none}",
     "#r-who .dots{display:flex;gap:3px;flex:none}#r-who .dots i{width:7px;height:7px;border-radius:50%;background:var(--c);opacity:.85}",
     "body[data-rail=one] #r-who .nm,body[data-rail=one] #r-who .dots,body[data-rail=one] #r-who .sw{display:none}body[data-rail=one] #r-who{justify-content:center;width:auto;padding:4px;background:transparent}",
+    "body[data-only] #r-who .nm,body[data-only] #r-who .dots,body[data-only] #r-who .sw{display:none}body[data-only] #r-who{justify-content:center;width:auto;padding:4px;background:transparent}",
     "#whomenu{position:fixed;left:8px;bottom:52px;width:270px;background:var(--side);border:1px solid var(--line);border-radius:calc(var(--r) * 1.4);padding:8px;z-index:30;box-shadow:0 14px 40px rgba(0,0,0,.45);transform-origin:bottom left}#whomenu .key{margin-left:auto;font-size:10.5px;color:var(--dim);background:var(--raised);border-radius:4px;padding:1px 5px;font-family:inherit}",
     "#whomenu[hidden]{display:none}#whomenu:not([hidden]){animation:pfIn .22s cubic-bezier(.2,1.2,.4,1) both}",
     "@keyframes pfIn{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}",
