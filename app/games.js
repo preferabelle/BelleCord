@@ -1,6 +1,5 @@
-// The games that can have a badge: what each profile has (account, rank, main, stats). Games with "live" fill in
-// from the real profile through the badge hub ("lock" is what live stats replace, so nobody can type in a fake rank).
-// Rainbow Six Siege, Rocket League and Marvel Rivals have no stats anyone can read, so they're filled in by hand.
+// badge games: profile fields per game. `live` = filled from the hub, `lock` = fields live data overrides.
+// R6, Rocket League and Marvel Rivals have no public stats, so they're manual.
 (function () {
   "use strict";
   const T = (s) => s.split("|");
@@ -52,7 +51,7 @@
     { key: "roblox", name: "Roblox", glyph: "RBX", color: "#3b82f6", handle: "Roblox username", hint: "Your username, not your display name", live: "roblox", lock: [], liveSays: "Your avatar, friends, followers, groups and favorite games come from your real Roblox profile. Anything you type below shows too.",
       ranks: [], mainLabel: "Favorite game", stats: T("Hours|Favorite experience|Friends|Badges") },
   ];
-  // ---- badge pictures: one small original picture per game (drawn here, white on the game's color) ----
+  // badge icons (white on game color)
   const S = (d) => '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
   const ICONS = {
     overwatch: S('<circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1.6" fill="#fff"/>'), // crosshair
@@ -71,10 +70,10 @@
     lichess: S('<path d="M6 3.5h2.5v2h2.5v-2h2v2h2.5v-2H18V9l-2 1.5V17H8v-6.5L6 9z"/><path d="M5 20.5h14"/>'), // rook
     roblox: S('<rect x="3" y="12" width="9" height="8" rx="1"/><rect x="12" y="12" width="9" height="8" rx="1"/><rect x="7.5" y="4" width="9" height="8" rx="1"/><circle cx="7.5" cy="16" r="1" fill="#fff"/><circle cx="16.5" cy="16" r="1" fill="#fff"/><circle cx="12" cy="8" r="1" fill="#fff"/>'), // stacked bricks
   };
-  // (not a game: the badge you earn by finishing the tutorial)
+  // tutorial badge
   ICONS.pilot = S('<path d="M2.5 13.5 21 6l-4.5 13-4-5.5z" fill="#fff"/><path d="M12.5 13.5 21 6"/><path d="M12.5 13.5v5l2.5-2.5"/>');
   const PILOT = { key: "pilot", name: "BelleCord Pilot", glyph: "BC", color: "#e0301e" };
-  // (not a game either: mine, the one who made BelleCord. A key with a heart for its bow.)
+  // owner badge (mine): key with a heart bow
   ICONS.owner = S('<path d="M12 11.6c-2.4-1.5-5.4-3.5-5.4-6.2a2.8 2.8 0 0 1 5.4-1.3 2.8 2.8 0 0 1 5.4 1.3c0 2.7-3 4.7-5.4 6.2z" fill="#fff"/><path d="M12 11.5v10"/><path d="M12 16.6h3.6M12 19.8h2.6"/>');
   const OWNER = { key: "owner", name: "Owner", glyph: "OWN", color: "#d4a017" };
   const icon = (key) => ICONS[key] || "";

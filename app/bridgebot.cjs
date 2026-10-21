@@ -1,11 +1,9 @@
-// BridgeCord, run from the app: your own Fluxer <-> Discord bridge bot, on this computer, while the app is open.
-// It downloads the newest BridgeCord from its GitHub releases into the app's own folder, keeps your two bot tokens
-// in its settings.txt there (they never leave this computer and the page never gets them back), installs its parts
-// with Node.js, and starts and stops it. What it prints is kept so the dashboard can show it, along with the claim
-// code and the invite links it gives out.
+// BridgeCord runner: downloads the release into userData/bridgecord, writes tokens to its settings.txt
+// (never sent back to the renderer), npm installs deps, starts/stops the process and buffers stdout
+// for the dashboard (claim code, invite links)
 const path = require("path");
 const fs = require("fs");
-const zlib = require("zlib");
+const unzip = require("./unzip.cjs");
 const { spawn, execFile } = require("child_process");
 
 const REPO = "preferabelle/BridgeCord";
@@ -20,7 +18,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
   let child = null, phase = "off", note = "", lines = [], claim = null, invites = {}, latest = null, busy = false;
   const say = (t) => {
     for (const raw of String(t).split(/\r?\n/)) {
-      // (the start window draws boxes around things: the words matter, the box doesn't)
+      // strip box-drawing chars from the console banner
       const l = raw.replace(/\x1b\[[0-9;]*m/g, "").replace(/[┏┓┗┛━┃]/g, "").trimEnd();
       if (!l.trim()) continue;
       lines.push(l.trim());
@@ -35,7 +33,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
     if (lines.length > 300) lines = lines.slice(-200);
   };
 
-  // ---- Node.js: BridgeCord runs on it (it's free: nodejs.org) ----
+  // node detection
   const NODE_SPOTS = WIN
     ? [path.join(process.env.ProgramFiles || "C:\\Program Files", "nodejs", "node.exe"), path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "nodejs", "node.exe"), path.join(process.env.LOCALAPPDATA || "", "Programs", "nodejs", "node.exe")]
     : ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node", path.join(process.env.HOME || "", ".volta", "bin", "node")];
@@ -61,14 +59,14 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
     return env;
   };
 
-  // ---- getting BridgeCord ----
+  // download
   async function getJson(url) {
     const r = await net.fetch(url, { headers: { "user-agent": "BelleCord", accept: "application/vnd.github+json" } });
     if (!r.ok) throw new Error("GitHub said " + r.status);
     return r.json();
   }
   async function newest() {
-    // (BridgeCord's own repo first; until that's up, it's posted next to my BelleCord updates)
+    // BridgeCord repo first, then the BelleCord release assets
     let rel = null, asset = null;
     for (const url of ["https://api.github.com/repos/" + REPO + "/releases/latest", "https://api.github.com/repos/preferabelle/BelleCord/releases/tags/bridgecord"]) {
       try { rel = await getJson(url); asset = (rel.assets || []).find((a) => /\.zip$/i.test(a.name)); if (asset) break; } catch (e) {}
@@ -77,23 +75,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
     latest = { tag: /^v\d+$/.test(rel.tag_name) ? rel.tag_name : rel.tag_name + "@" + (asset.updated_at || asset.id), title: rel.name || rel.tag_name, url: asset.browser_download_url, notes: String(rel.body || "").slice(0, 800) };
     return latest;
   }
-  function unzip(buf) {
-    let e = buf.length - 22; while (e >= 0 && buf.readUInt32LE(e) !== 0x06054b50) e--;
-    if (e < 0) throw new Error("not a zip");
-    const count = buf.readUInt16LE(e + 10); let p = buf.readUInt32LE(e + 16); const out = [];
-    for (let i = 0; i < count; i++) {
-      if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error("broken zip");
-      const method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20), nlen = buf.readUInt16LE(p + 28), xlen = buf.readUInt16LE(p + 30), clen = buf.readUInt16LE(p + 32), local = buf.readUInt32LE(p + 42);
-      const name = buf.slice(p + 46, p + 46 + nlen).toString("utf-8");
-      p += 46 + nlen + xlen + clen;
-      if (name.endsWith("/")) continue;
-      const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28), data = buf.slice(start, start + csize);
-      out.push({ name, data: method === 0 ? data : method === 8 ? zlib.inflateRawSync(data) : null });
-    }
-    return out;
-  }
-  // BridgeCord comes with BelleCord (app/bridgecord/): installing it needs no internet. Only a newer one than the
-  // one that came with the app is downloaded.
+  // bundled copy in app/bridgecord/ unless GitHub has a newer tag
   const BUNDLED = path.join(__dirname, "bridgecord");
   const bundled = () => { try { const v = JSON.parse(fs.readFileSync(path.join(BUNDLED, "version.json"), "utf-8")); const zip = path.join(BUNDLED, "BridgeCord.zip"); return fs.existsSync(zip) ? { tag: String(v.tag || "bundled"), title: String(v.title || "BridgeCord"), zip } : null; } catch { return null; } };
   const tagNum = (t) => Number((/^v(\d+)$/.exec(String(t || "")) || [])[1] || 0);
@@ -109,13 +91,13 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
       else buf = Buffer.from(await r.arrayBuffer());
     }
     const files = unzip(buf).filter((f) => f.data);
-    // (a zip with everything inside one folder: that folder is BridgeCord)
+    // zip has a single top-level folder
     const tops = new Set(files.map((f) => f.name.split("/")[0]));
     const strip = tops.size === 1 && files.every((f) => f.name.includes("/")) ? [...tops][0] + "/" : "";
     fs.mkdirSync(DIR, { recursive: true });
     for (const f of files) {
       const rel2 = f.name.slice(strip.length);
-      // (your settings and the bot's saved data are never replaced)
+      // keep settings.txt and bot data
       if (!rel2 || rel2.includes("..") || /^(settings\.txt|data\/|node_modules\/|config\/)/.test(rel2)) continue;
       const to = path.join(DIR, rel2);
       fs.mkdirSync(path.dirname(to), { recursive: true });
@@ -128,7 +110,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
   }
   const installed = () => fs.existsSync(path.join(DIR, "launcher.js"));
 
-  // ---- your tokens: settings.txt in BridgeCord's folder ----
+  // tokens (settings.txt)
   const SETTINGS = () => path.join(DIR, "settings.txt");
   function settingsText() {
     try { return fs.readFileSync(SETTINGS(), "utf-8"); } catch {}
@@ -153,7 +135,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
   }
   const tokens = () => { const t = settingsText(); return { fluxer: hasLine(t, "fluxer token"), discord: hasLine(t, "discord token") }; };
 
-  // ---- running it ----
+  // process control
   function npmInstall(node) {
     return new Promise((ok, no) => {
       note = "Installing BridgeCord's parts (a minute or two, only the first time)...";
@@ -241,7 +223,7 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
   ipcMain.handle("bridgebot:folder", () => { fs.mkdirSync(DIR, { recursive: true }); shell.openPath(DIR); return true; });
   ipcMain.handle("bridgebot:node", () => { shell.openExternal("https://nodejs.org/en/download"); nodeCache = null; return true; });
 
-  // starts with the app if you asked it to, and stops when the app closes
+  // autostart; stop on quit
   app.whenReady().then(() => { if (readMine().auto && installed()) setTimeout(() => start().catch(() => {}), 5000); });
   app.on("before-quit", () => { if (child) stop(); });
 };

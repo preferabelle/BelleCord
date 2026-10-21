@@ -1,18 +1,14 @@
-// What's new, on the dashboard: what came in every update, newest first (the newest one open, the rest a click
-// away). It reads the real release notes from GitHub, and shows the copy that came with the app when GitHub can't be
-// reached. A "NEW" tag sits on it until you've seen the latest one.
+// what's new: release notes from GitHub, newest first, falls back to whatsnew-data.js. NEW tag until seen.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const host = window.bcApp || {};
-  const P = (k, d) => { try { const v = window.bcPref ? window.bcPref(k) : undefined; return v === undefined ? d : v; } catch { return d; } };
-  const save = (c) => { try { window.bcSavePref && window.bcSavePref(c); } catch {} };
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { pref: P, savePref: save, esc } = window.bcUtil;
   const numOf = (title) => { const m = /Update\s+(\d+)/i.exec(String(title || "")); return m ? Number(m[1]) : /^BelleCord$/i.test(String(title || "").trim()) ? 1 : 0; };
 
-  // release notes are written like "- **Thing.** what it does": just enough of that, made into a page
+  // minimal markdown for release notes (lists, bold, code)
   function md(text) {
-    const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>").replace(/ — /g, " - ").replace(/—/g, "-");
+    const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
     const out = []; let list = null, sub = null;
     const close = () => { if (sub) { list.push("<ul>" + sub.join("") + "</ul>"); sub = null; } if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; } };
     for (const raw of String(text || "").replace(/\r/g, "").split("\n")) {
@@ -59,7 +55,7 @@
     const mb = $("wn-more"); if (mb) mb.onclick = () => { showAll = !showAll; draw(); };
     box.querySelectorAll("[data-tour]").forEach((b) => (b.onclick = (e) => { e.preventDefault(); if (window.bcTutorial) window.bcTutorial.start(Number(b.dataset.tour)); }));
   }
-  // (seen once it's actually on screen on the dashboard)
+  // mark seen once actually visible
   setInterval(() => {
     if (!list.length || document.body.dataset.mode !== "dash") return;
     const r = sec.getBoundingClientRect();
@@ -67,7 +63,7 @@
   }, 2000);
 
   async function load() {
-    // the copy that came with the app first, then the real notes from GitHub over it
+    // bundled notes first, then GitHub's on top
     const byN = new Map();
     for (const u of window.bcWhatsNew || []) byN.set(u.n, { n: u.n, notes: u.notes, at: u.at || null });
     draw2(byN);

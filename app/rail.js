@@ -1,12 +1,10 @@
-// Reading both sites: their server lists (for the double list), unread DMs, voice channels and who's in them,
-// people online, messages you can see, and their notifications (for the inbox). Everything comes from what each
-// page already shows you; nothing is sent anywhere and nothing is done for you.
-// Fluxer's hooks come from Fluxer's own code (its data-flx attributes); Discord's from its page as Discord's
-// community themes use it (data-list-item-id, chat-messages ids, design class names).
+// scrapes both sites' DOM for the dual server rail, unread DMs, voice states, online members, visible messages
+// and notifications (inbox). read only.
+// fluxer: data-flx attributes from its source. discord: data-list-item-id, chat-messages ids, class prefixes.
 (function () {
   "use strict";
 
-  // ---------------- runs inside Fluxer's page ----------------
+  // fluxer (injected)
   const READ_FLUXER = "(" + function () {
     var bgUrl = function (el) { if (!el) return null; var s = el.style && el.style.backgroundImage || getComputedStyle(el).backgroundImage || ""; var m = s.match(/url\(["']?([^"')]+)["']?\)/); return m ? m[1] : null; };
     var num = function (t) { t = String(t || "").trim(); return /^\d{1,4}\+?$/.test(t) ? parseInt(t, 10) : 0; };
@@ -34,20 +32,20 @@
           var ms = box ? box.querySelectorAll('[data-flx^="app.sidebar-nav.guild-folder-item.mini-guild-icon.mini-guild-icon"]') : [];
           for (var j = 0; j < ms.length && minis.length < 4; j++) minis.push(bgUrl(ms[j]) || "ini:" + (ms[j].textContent || "").trim());
           var fb = box && box.querySelector('[data-flx="app.sidebar-nav.guild-folder-item.render-collapsed-folder.folder-badge"]');
-          var fcolor = box && box.style ? box.style.getPropertyValue("--folder-accent").trim() : ""; // (the folder's own color)
-          fi++; // folders are known by their place among folders, so opening one doesn't change the others
-          var fopen = el.getAttribute("aria-expanded") === "true"; // (an open folder's servers show their own numbers)
+          var fcolor = box && box.style ? box.style.getPropertyValue("--folder-accent").trim() : "";
+          fi++; // folders keyed by index so expanding one doesn't shift the others
+          var fopen = el.getAttribute("aria-expanded") === "true"; // expanded folder children have their own badges
           out.servers.push({ k: "f", id: "folder:" + fi, name: label.split(",")[0].replace(/\s*folder\s*$/i, "").trim() || "Folder", minis: minis, color: fcolor, m: fopen ? 0 : Math.max(mentionsIn(label), fb ? num(fb.textContent) : 0), u: !fopen && /,\s*unread/i.test(label) ? 1 : 0, open: fopen ? 1 : 0 });
         }
       }
       var dmItems = col.querySelectorAll('[data-flx="app.sidebar-nav.guild-list-dm-item.dm-list-item.button.select"]');
       for (var d = 0; d < dmItems.length; d++) out.dms += Math.max(1, mentionsIn(dmItems[d].getAttribute("aria-label")));
     }
-    // the open server: its name, its voice channels and who's in them
+    // current guild: name, voice channels, members in voice
     var gm = location.pathname.match(/^\/channels\/(\d+)/), gid = gm ? gm[1] : null;
     var gname = document.querySelector('[data-flx="app.guild-header.guild-name"]');
     out.guild = gid ? { id: gid, name: gname ? gname.textContent.trim() : "" } : null;
-    // a channel row (the clickable part; Fluxer puts its name in data-dnd-name and "name, voice channel, selected" in its label)
+    // channel row: name in data-dnd-name, aria-label is 'name, voice channel, selected'
     var CH = '[data-flx="app.generic-channel-item.long-pressable.click"][data-dnd-name],[data-channel-list-focus-item="true"][data-dnd-name]';
     var chSel = document.querySelector('[data-flx="app.generic-channel-item.long-pressable.click"][aria-current="page"],[data-channel-list-focus-item="true"][aria-current="page"]');
     out.channel = chSel ? (chSel.getAttribute("data-dnd-name") || "") : "";
@@ -67,7 +65,7 @@
         out.voice.push({ guild: gid, guildName: out.guild.name, name: vname, users: users, connected: /,\s*connected/i.test(lab) ? 1 : 0 });
       }
     }
-    // people online you can see (member list, DMs, friends, voice)
+    // online members (member list, DMs, friends, voice)
     var avs = document.querySelectorAll('[data-flx-user-id][data-flx-status]'), seenP = {};
     for (var a = 0; a < avs.length && out.people.length < 80; a++) {
       var av = avs[a], st = av.getAttribute("data-flx-status");
@@ -76,23 +74,23 @@
       var pim = av.querySelector("img");
       out.people.push({ id: pid, name: av.getAttribute("data-flx-user-name") || av.getAttribute("data-flx-user-username") || "", status: st, avatar: pim ? pim.currentSrc || pim.src : bgUrl(av) });
     }
-    // you (for your game badges)
+    // self (badges)
     var meEl = document.querySelector('[data-flx-user-self="true"][data-flx-user-id]');
     if (meEl) { var mim = meEl.querySelector("img"); out.me = { id: meEl.getAttribute("data-flx-user-id"), name: meEl.getAttribute("data-flx-user-name") || "", avatar: mim ? mim.currentSrc || mim.src : null }; }
-    // messages you can see (each with its own author's picture, not the one of a message it replies to)
+    // visible messages; avatar from the message itself, not the replied-to one
     var arts = document.querySelectorAll('[data-flx-message-id][data-flx-author-id]'), avBy = {};
     for (var q2 = 0; q2 < arts.length; q2++) { var aid0 = arts[q2].getAttribute("data-flx-author-id"), ai = arts[q2].querySelector('[data-flx-user-id="' + aid0 + '"] img'); if (ai && !avBy[aid0]) avBy[aid0] = ai.currentSrc || ai.src; }
     for (var k = Math.max(0, arts.length - 60); k < arts.length; k++) {
       var e = arts[k];
       if (e.getAttribute("data-flx-system") === "true") continue;
-      var txt = e.querySelector('[data-search-highlight-scope="message"]'); // (the message's own text, not the reply preview above it)
+      var txt = e.querySelector('[data-search-highlight-scope="message"]'); // message body, not the reply preview
       out.msgs.push({ id: e.getAttribute("data-flx-message-id"), ch: e.getAttribute("data-flx-channel-id"), g: e.getAttribute("data-flx-guild-id") || "@me", author: e.getAttribute("data-flx-author-name") || "", aid: e.getAttribute("data-flx-author-id"), self: e.getAttribute("data-flx-author-self") === "true" ? 1 : 0, bot: e.getAttribute("data-flx-author-bot") === "true" ? 1 : 0, mention: e.getAttribute("data-flx-mentioned") === "true" ? 1 : 0, text: txt ? txt.textContent.slice(0, 160) : "", avatar: avBy[e.getAttribute("data-flx-author-id")] || null });
     }
     if (window.__bcN && window.__bcN.length) out.notes = window.__bcN.splice(0);
     return out;
   }.toString() + ")()";
 
-  // ---------------- runs inside Discord's page ----------------
+  // discord (injected)
   const READ_DISCORD = "(" + function () {
     var has = function (el, name) { var c = el && el.getAttribute && el.getAttribute("class") || ""; return new RegExp("(^|\\s)" + name + "_").test(c); };
     var q = function (root, name) { return root.querySelector('[class^="' + name + '_"],[class*=" ' + name + '_"]'); };
@@ -110,7 +108,7 @@
         var li = el.closest('[class^="listItem_"],[class*=" listItem_"]') || el.parentElement;
         var am = label.match(/(\d+)\s+mentions?/i), m = am ? +am[1] : 0;
         if (li) { var bs = li.querySelectorAll('[class^="numberBadge_"],[class*=" numberBadge_"]'); for (var b = 0; b < bs.length; b++) m = Math.max(m, num(bs[b].textContent)); }
-        if (el.hasAttribute("aria-expanded")) { // a folder
+        if (el.hasAttribute("aria-expanded")) { // folder
           var imgs = el.querySelectorAll("img"), minis = [];
           for (var j = 0; j < imgs.length && minis.length < 4; j++) minis.push(imgs[j].currentSrc || imgs[j].src);
           var dopen = el.getAttribute("aria-expanded") === "true";
@@ -119,7 +117,7 @@
         }
         if (!/^\d{5,25}$/.test(key) || seen[key]) continue;
         var beforeSep = sep && (sep.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
-        if (beforeSep || (src && /\/(avatars|channel-icons)\//.test(src))) { out.dms += m || 1; continue; } // an unread DM bubble, not a server
+        if (beforeSep || (src && /\/(avatars|channel-icons)\//.test(src))) { out.dms += m || 1; continue; } // unread DM bubble
         seen[key] = 1;
         var pill = li && li.querySelector('[class^="pill_"] [class^="item_"],[class*=" pill_"] [class*=" item_"],[class^="pill_"] span,[class*=" pill_"] span');
         var ph = pill ? parseFloat(pill.style.height || getComputedStyle(pill).height) || 0 : 0;
@@ -133,7 +131,7 @@
     var gName = parts.filter(function (s) { return !/^[#@]/.test(s); })[0] || "";
     out.guild = gid ? { id: gid, name: gName } : null;
     out.channel = chPart.replace(/^[#@]/, "");
-    // voice channels in the open server and who's in them
+    // voice channels + members
     if (gid) {
       var chans = document.querySelectorAll('[data-list-item-id^="channels___"]');
       for (var v = 0; v < chans.length; v++) {
@@ -151,22 +149,22 @@
         out.voice.push({ guild: gid, guildName: gName, cid: cid, name: (nameEl ? nameEl.textContent : (c.getAttribute("aria-label") || "").split(/[,(]/)[0]).trim(), users: users });
       }
     }
-    // people online you can see (member list, DMs, friends)
+    // online members
     var marks = document.querySelectorAll('rect[mask*="svg-mask-status-"],[class*="status_"][aria-label]'), seenP = {};
     for (var s = 0; s < marks.length && out.people.length < 80; s++) {
       var mk = marks[s], mask = mk.getAttribute("mask") || "", stt = (mask.match(/status-(online|idle|dnd|streaming)/) || [])[1];
       if (!stt) continue;
       var row = mk.closest('[class^="member_"],[class*=" member_"],[class^="peopleListItem_"],[class*=" peopleListItem_"],[class^="channel__"],[class*=" channel__"],[class^="channel_"],[class*=" channel_"],li');
-      if (!row || row.closest('[class^="panels_"],[class*=" panels_"]')) continue; // (not yourself in the bottom bar)
+      if (!row || row.closest('[class^="panels_"],[class*=" panels_"]')) continue; // skip own user panel
       var nameEl2 = row.querySelector('[class^="name_"],[class*=" name_"],[class^="username_"],[class*=" username_"],[class*="nameAndDecorators"]');
       var pn = nameEl2 ? nameEl2.textContent.trim().split("\n")[0] : ""; if (!pn || seenP[pn]) continue; seenP[pn] = 1;
       var pim = row.querySelector("img");
       out.people.push({ id: pn, name: pn, status: stt === "streaming" ? "online" : stt, avatar: pim ? pim.currentSrc || pim.src : null });
     }
-    // you (for your game badges): the picture in the bottom bar carries your account number
+    // self: user id from the avatar url in the user panel
     var pan = q(document, "panels");
     if (pan) { var pims = pan.querySelectorAll("img"); for (var pi = 0; pi < pims.length; pi++) { var mm = (pims[pi].currentSrc || pims[pi].src || "").match(/\/avatars\/(\d{5,25})\//); if (mm) { out.me = { id: mm[1], name: "", avatar: pims[pi].currentSrc || pims[pi].src }; break; } } }
-    // messages you can see
+    // visible messages
     var lis = document.querySelectorAll('li[id^="chat-messages-"]'), last = null, avByName = {};
     var ownAv = function (L) { var ims = L.querySelectorAll('img[class^="avatar_"],img[class*=" avatar_"]'); for (var z = 0; z < ims.length; z++) if (!ims[z].closest('[class^="repliedMessage_"],[class*=" repliedMessage_"]')) return ims[z].currentSrc || ims[z].src; return null; };
     for (var k = 0; k < lis.length; k++) {
@@ -185,7 +183,7 @@
     return out;
   }.toString() + ")()";
 
-  // notifications from either site land in the inbox too (it keeps them, then shows them as usual)
+  // forward site notifications to the inbox (then show normally)
   const HOOK_NOTIFS = "(" + function () {
     if (window.__bcHooked) return 1;
     window.__bcHooked = 1; window.__bcN = []; window.__bcNObj = {};
@@ -216,7 +214,7 @@
     return 1;
   }.toString() + ")()";
 
-  // ---------------- do something on the site's page (a click you made on the app) ----------------
+  // actions in the page (forwarded clicks)
   const ACT = function (side, what, arg) {
     var tap = function (el) { var r = el.getBoundingClientRect(), o = { bubbles: true, cancelable: true, view: window, clientX: r.left + 4, clientY: r.top + 4, button: 0 }; try { el.dispatchEvent(new PointerEvent("pointerdown", o)); el.dispatchEvent(new MouseEvent("mousedown", o)); el.dispatchEvent(new PointerEvent("pointerup", o)); el.dispatchEvent(new MouseEvent("mouseup", o)); } catch (e) {} el.click(); return 1; };
     var toggle = function (fe) { var before = fe.getAttribute("aria-expanded"); tap(fe); return new Promise(function (res) { setTimeout(function () { if (fe.isConnected && fe.getAttribute("aria-expanded") === before) fe.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true })); res(1); }, 150); }); };
@@ -242,8 +240,8 @@
     return 0;
   }.toString();
 
-  // ---------------- the server lists in the app ----------------
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // server rail rendering
+  const { esc } = window.bcUtil;
   const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 3).map((w) => w[0]).join("").slice(0, 3);
   const FOLDER_SVG = '<svg class="fold" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.1c.6 0 1.2.3 1.6.7L12.6 6H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11Z"/></svg>';
   const blank = () => ({ items: [], path: "", dms: 0, sig: "", voice: [], people: [], msgs: [], guild: null, channel: "", ok: false });
@@ -262,10 +260,10 @@
       b.dataset.look = look;
       const pic = b.querySelector(".pic");
       if (it.k === "f") {
-        // an open folder (or one with its own icon) shows a folder; a closed one shows its first four servers
+        // expanded folders (or ones with a custom icon) show the folder icon; collapsed show the first four servers
         pic.innerHTML = it.open || !(it.minis || []).length ? FOLDER_SVG : '<span class="minis">' + it.minis.map((s) => (String(s).startsWith("ini:") ? '<span class="mini">' + esc(s.slice(4)) + "</span>" : '<img src="' + esc(s) + '" alt="">')).join("") + "</span>";
       } else pic.innerHTML = it.icon ? '<img src="' + esc(it.icon) + '" alt="">' : '<span class="ini">' + esc(it.ini || initials(it.name)) + "</span>";
-      if (it.color) b.style.setProperty("--fcol", it.color); else b.style.removeProperty("--fcol"); // (a folder's own color)
+      if (it.color) b.style.setProperty("--fcol", it.color); else b.style.removeProperty("--fcol");
       b.title = it.name; b.setAttribute("aria-label", it.name);
     }
     b.classList.toggle("folder", it.k === "f");
@@ -277,7 +275,7 @@
     if (ping.textContent !== t) ping.textContent = t;
     ping.classList.toggle("on", !!it.m);
   }
-  const place = (box, kids) => { kids.forEach((k, i) => { if (box.children[i] !== k) box.insertBefore(k, box.children[i] || null); }); while (box.children.length > kids.length) box.lastElementChild.remove(); }; // (only moves what moved)
+  const place = (box, kids) => { kids.forEach((k, i) => { if (box.children[i] !== k) box.insertBefore(k, box.children[i] || null); }); while (box.children.length > kids.length) box.lastElementChild.remove(); }; // only move what changed
   function draw(side) {
     const list = document.querySelector('#rail .col[data-side="' + side + '"] .list');
     if (!list) return;
@@ -300,7 +298,7 @@
     if (col) col.classList.toggle("empty", !st.items.length);
   }
 
-  // ---------------- reading loop ----------------
+  // poll loop
   const wv = (side) => document.getElementById("wv-" + side);
   const ready = { fluxer: false, discord: false };
   async function read(side) {
@@ -339,7 +337,7 @@
       await act(side, kind, id);
       setTimeout(() => read(side), 250); setTimeout(() => read(side), 900);
     },
-    // join a voice channel: open its server first, then press the channel (both are your clicks, passed on)
+    // join voice: open the guild, then click the channel
     async joinVoice(side, guild, nameOrId) {
       if (window.bcOnServer) window.bcOnServer(side, "g");
       if (!state[side].path.startsWith("/channels/" + guild)) { await act(side, "g", guild); await new Promise((r) => setTimeout(r, 900)); }

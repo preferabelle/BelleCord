@@ -1,8 +1,8 @@
-// The app's own page gets exactly these few things from the app, nothing more.
+// api exposed to the shell page
 const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("bcApp", {
   platform: process.platform,
-  // who's using BelleCord right now (each person has their own sign-ins and settings)
+  // current profile
   profile: (() => { try { return ipcRenderer.sendSync("profiles:now"); } catch (e) { return { active: "main", suffix: "", list: [] }; } })(),
   profiles: {
     get: () => ipcRenderer.invoke("profiles:get"),
@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld("bcApp", {
   checkUpdate: () => ipcRenderer.invoke("update:check"),
   whatsNew: () => ipcRenderer.invoke("whatsnew"),
   applyUpdate: () => ipcRenderer.invoke("update:apply"),
-  // Fix Fluxer (one button for whatever keeps Fluxer from working)
+  // fix fluxer
   fixFluxer: () => ipcRenderer.invoke("fluxer:fix"),
   fluxerDiagnose: () => ipcRenderer.invoke("fluxer:diagnose"),
   fluxerReset: () => ipcRenderer.invoke("fluxer:reset"),
@@ -30,12 +30,12 @@ contextBridge.exposeInMainWorld("bcApp", {
   fluxerHome: () => ipcRenderer.invoke("fluxer:home"),
   fluxerLast: () => ipcRenderer.invoke("fluxer:last"),
   restartApp: () => ipcRenderer.invoke("app:restart"),
-  // Performance (dashboard)
+  // perf
   perfUsage: () => ipcRenderer.invoke("perf:usage"),
   perfSpell: (on) => ipcRenderer.invoke("perf:spell", !!on),
   perfClean: () => ipcRenderer.invoke("perf:clean"),
   perfTop: () => ipcRenderer.invoke("perf:top"),
-  // BridgeCord: your own bridge bot, run from the app (bridgebot.cjs)
+  // bridgecord
   bridgeBot: {
     status: () => ipcRenderer.invoke("bridgebot:status"),
     start: () => ipcRenderer.invoke("bridgebot:start"),

@@ -1,13 +1,9 @@
-// Organize: the dashboard your way. The Organize button at the top of the dashboard lets you drag the sections into
-// any order (or use the arrows), hide the ones you don't use, and add them back from the "Hidden" row at the top any
-// time. "Back to normal" puts everything back the way it came. Saved with your other settings.
-// Sections that come in a future update show up where they normally go, until you move them.
+// dashboard reorder / hide. order saved in prefs; sections added in later updates keep their default spot
+// until moved.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const P = (k, d) => { try { const v = window.bcPref ? window.bcPref(k) : undefined; return v === undefined ? d : v; } catch { return d; } };
-  const save = (c) => { try { window.bcSavePref && window.bcSavePref(c); } catch {} };
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { pref: P, savePref: save, esc } = window.bcUtil;
 
   const css = document.createElement("style");
   css.textContent = [
@@ -34,7 +30,7 @@
   const nameOf = (sec) => { const h = sec.querySelector("h2"); return (h ? h.childNodes[0] && h.childNodes[0].nodeType === 3 ? h.childNodes[0].textContent : h.textContent : sec.id).trim(); };
   let order = [], hidden = [], applying = false, editing = false;
 
-  // the sections in your order; ones not in it (new ones) stay where they came in
+  // apply saved order; unknown (new) sections stay put
   function apply() {
     const w = wrap(); if (!w) return;
     applying = true;
@@ -44,7 +40,7 @@
       const known = secs.filter((s) => order.includes(s.id));
       const sorted = [...known].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
       if (sorted.some((s, i) => s !== known[i])) {
-        // (the known ones trade places among the spots they already hold)
+        // known sections permute among their own slots
         const marks = known.map((s) => { const m = document.createComment("org"); s.before(m); return m; });
         sorted.forEach((s, i) => marks[i].replaceWith(s));
       }
@@ -56,7 +52,7 @@
     save({ dashOrder: order, dashHidden: hidden });
   }
 
-  // ---- the bar on each section while organizing ----
+  // per-section toolbar in edit mode
   function bar(sec) {
     let b = sec.querySelector(":scope > .org-bar");
     if (!b) {
@@ -88,7 +84,7 @@
     sec.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
-  // ---- the row at the top while organizing: what's hidden, and the buttons ----
+  // top bar in edit mode: hidden sections + buttons
   function tray() {
     const w = wrap(); if (!w) return;
     let t = $("org-tray");
@@ -103,7 +99,7 @@
     $("org-hid").innerHTML = list.length ? list.map((s) => '<button data-back="' + esc(s.id) + '" title="Add it back">' + esc(nameOf(s)) + "</button>").join("") : '<span class="none">Nothing. Press Hide on a section to put it here.</span>';
     $("org-hid").querySelectorAll("[data-back]").forEach((x) => (x.onclick = () => { hidden = hidden.filter((h) => h !== x.dataset.back); remember(); apply(); const s = $(x.dataset.back); if (s) s.scrollIntoView({ block: "center", behavior: "smooth" }); }));
   }
-  // (the normal order is the order the sections came in, which is saved the first time this runs)
+  // default order = original DOM order, saved on first run
   let normal = [];
   function restoreNormal() {
     const w = wrap(); if (!w) return;
@@ -133,7 +129,7 @@
     hero.appendChild(b);
   }
 
-  // start once your settings are loaded; keep the order when other parts add their sections later
+  // init after prefs; observe for sections added later
   const wait = setInterval(() => {
     if (!window.bcPrefsReady || !wrap()) return;
     clearInterval(wait);
@@ -144,7 +140,7 @@
     button();
     apply();
     new MutationObserver(() => { if (applying || drag) return; noteNormal(); apply(); }).observe(wrap(), { childList: true });
-    // (Escape leaves Organize)
+    // esc exits
     document.addEventListener("keydown", (e) => { if (editing && e.key === "Escape") setEditing(false); });
   }, 200);
   window.bcSecHidden = (id) => hidden.includes(id);

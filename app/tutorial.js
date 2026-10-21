@@ -1,24 +1,20 @@
-// The tutorial: BelleCord, played like a video game's first level. The ones marked ⭐ Pro tip (in gold) are the
-// things worth knowing most. Finishing it unlocks the BelleCord Pilot badge (shell.js), which can be turned off. Each mission lights up one part of the app,
-// says what it does in a couple of lines, and gives XP. A few missions ask you to actually try the thing (they
-// finish by themselves when you do). Enter or → goes on, ← goes back, Esc skips. The 🎮 button in the title bar
-// plays it again any time, and so does "Play the tutorial" in App on the dashboard.
+// tutorial: missions highlight part of the UI with a short blurb and XP; some complete when the user does the
+// action. pro tips in gold. finishing grants the Pilot badge (shell.js). enter/right next, left back, esc skip.
+// replay from the title bar button or App.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const body = document.body;
-  const P = (k, d) => { try { const v = window.bcPref ? window.bcPref(k) : undefined; return v === undefined ? d : v; } catch { return d; } };
-  const save = (c) => { try { window.bcSavePref && window.bcSavePref(c); } catch {} };
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { pref: P, savePref: save, esc } = window.bcUtil;
   const mac = (window.bcApp && window.bcApp.platform) === "darwin";
   const key = (k) => (mac ? "Cmd" : "Ctrl") + "+" + k;
-  const only = () => { const o = P("only", null); return o === "fluxer" || o === "discord" ? o : null; }; // (when you only use one side)
+  const only = () => { const o = P("only", null); return o === "fluxer" || o === "discord" ? o : null; }; // single-site mode
   const go = (m) => { try { window.bcSetMode && window.bcSetMode(m); } catch {} };
   const showSec = (id) => { go("dash"); setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ block: "center", behavior: body.dataset.motion === "off" ? "auto" : "smooth" }); }, 250); };
 
-  // ---------------- the missions ----------------
-  // at: what gets lit up (none = the middle of the screen). before: done when the mission starts. try: a little
-  // task that finishes the mission by itself. skip: leave it out (for example, the side you don't use).
+  // missions
+  // at: element to highlight (none = centered). before: run on start. try: completes the mission when done.
+  // skip: omit (e.g. the unused side).
   const MISSIONS = () => [
     { title: "Welcome, pilot", xp: 0, text: () => "Hi " + esc(P("pilotName", "") || "there") + "! This is BelleCord, Fluxer and Discord in one window. I'll show you around. It takes about two minutes.<br><br><b>Enter</b> or <b>→</b> goes on, <b>←</b> goes back, <b>Esc</b> skips it." },
     { at: "#tabs", title: "Two worlds", xp: 50, skip: () => !!only(), before: () => go(body.dataset.side || "fluxer"),
@@ -58,7 +54,7 @@
     { title: "Mission complete", end: true, xp: 100, text: () => "That's everything. You're officially a BelleCord pilot, and you've got the badge to prove it." },
   ];
 
-  // ---------------- the look ----------------
+  // styles
   const css = document.createElement("style");
   css.textContent = [
     "#tutbtn{font-size:14px;padding:2px 8px}",
@@ -101,7 +97,7 @@
   ].join("\n");
   document.head.appendChild(css);
 
-  // ---------------- the buttons that start it ----------------
+  // entry points
   const bar = $("bar");
   if (bar && !$("tutbtn")) {
     const b = document.createElement("button");
@@ -118,7 +114,7 @@
     appCard.appendChild(b);
   }
 
-  // ---------------- tours: a short tutorial for just one update (from its "▶ Take the tour" in What's new) ----------------
+  // per-update tours (from What's new)
   const clickIf = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
   const openThemes = () => { showSec("s-theme"); setTimeout(() => { const w = $("tplwrap"); if (w && w.hidden) clickIf("#tpl-toggle"); else if (w) w.scrollIntoView({ block: "start" }); }, 300); };
   const rowOf = (sel) => { const el = document.querySelector(sel); return el && el.closest(".prow"); };
@@ -163,15 +159,15 @@
       { title: "That's Update 11", end: true, xp: 50, text: () => "Enjoy." },
     ] },
   };
-  let tour = null; // (the tour that's playing, or null for the full tutorial)
+  let tour = null; // active tour, null = full tutorial
 
-  // ---------------- playing it ----------------
+  // playback
   let list = [], i = 0, xp = 0, root = null, trying = null, tryTimer = null, startedFrom = null;
   const total = () => list.reduce((n, m) => n + (m.xp || 0), 0);
   function start(n) {
     stop(true);
     tour = n != null && TOURS[n] ? TOURS[n] : null;
-    // (a dashboard section you hid with Organize is skipped too)
+    // skip sections hidden via Organize
     const hiddenSec = (m) => { const id = /^#(s-[\w-]+)$/.exec(m.at || ""); const el = id && $(id[1]); return !!(el && el.classList.contains("org-off")); };
     list = (tour ? tour.steps() : MISSIONS()).filter((m) => !(m.skip && m.skip()) && !hiddenSec(m));
     i = 0; xp = 0; startedFrom = body.dataset.mode;
@@ -254,12 +250,12 @@
         '<div class="btns">' + (i > 0 ? '<button class="back" title="Back (←)">←</button>' : "") + '<button class="skip" title="Esc">' + (tour ? "Skip tour" : "Skip tutorial") + '</button><button class="next">' + (i === 0 ? "Start ▶" : "Next ▶") + "</button></div>";
     }
     const bk = card.querySelector(".back"); if (bk) bk.onclick = back;
-    // (Skip and ✕ act the moment they're pressed, so nothing else on the page can get in the way of the click)
+    // Skip and close act immediately so nothing else can intercept the click
     card.querySelectorAll(".skip,.x").forEach((b) => { const quit = (e) => { e.preventDefault(); e.stopPropagation(); stop(); }; b.addEventListener("pointerdown", quit); b.onclick = quit; });
     card.querySelector(".next").onclick = next;
     card.classList.toggle("tip", !!m.tip);
     card.classList.remove("bump"); void card.offsetWidth; card.classList.add("bump");
-    // a little task: it finishes the mission by itself when you do it
+    // try-tasks
     if (m.try) {
       const st = m.try.start ? m.try.start() : {};
       trying = m;
@@ -272,7 +268,7 @@
         }
       }, 250);
     }
-    // (the page may still be moving into place, so the light finds its spot again a moment later)
+    // re-measure after layout settles
     place(); setTimeout(place, 300); setTimeout(place, 700);
   }
   function place() {
@@ -289,7 +285,7 @@
     const pad = 6;
     hole.hidden = false;
     Object.assign(hole.style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
-    // the card goes where there's room: below, above, right, then left
+    // card placement: below, above, right, left
     const cw = card.offsetWidth, ch = card.offsetHeight, gap = 16, M = 12;
     let x, y;
     if (r.bottom + gap + ch < innerHeight - M) { y = r.bottom + gap; x = r.left; }
@@ -316,13 +312,13 @@
   }
   window.bcTutorial = { start, stop, hasTour: (n) => !!TOURS[n] };
 
-  // the first time: a little note pointing at the 🎮 (once, after the intro and the name box are gone)
+  // first run: one-time hint pointing at the tutorial button (after intro and name prompt)
   const wait = setInterval(() => {
     if (!window.bcPrefsReady) return;
     clearInterval(wait);
     if (P("tutDone", false) || P("tutHinted", false)) return;
     setTimeout(() => {
-      if ($("namebox") || ($("bcsplash") && !$("bcsplash").hidden) || $("onlybox") || $("bctut")) return; // (try again next time)
+      if ($("namebox") || ($("bcsplash") && !$("bcsplash").hidden) || $("onlybox") || $("bctut")) return; // retry next launch
       const h = document.createElement("div");
       h.id = "tuthint"; h.textContent = "New here? Press 🎮 for a quick tutorial.";
       h.onclick = () => { h.remove(); start(); };

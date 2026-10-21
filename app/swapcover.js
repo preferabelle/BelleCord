@@ -1,5 +1,4 @@
-// While BelleCord swaps to another person, the window reloads. This runs before anything is drawn, so the reload is
-// hidden under the same colored cover the swap ended on (profiles.js then opens it back up).
+// runs before first paint during a profile switch: covers the reload with the swap color (profiles.js removes it)
 (function () {
   try {
     const s = JSON.parse(sessionStorage.getItem("bcSwapTo") || "null");

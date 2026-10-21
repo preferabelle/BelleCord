@@ -1,32 +1,27 @@
-// Fix Fluxer: one button that finds out why Fluxer won't work in BelleCord, and fixes everything an app can fix.
-// Shared by both BelleCords (mine and the everyone app). Runs in the app's main process (Electron).
+// Fix Fluxer: diagnoses why Fluxer won't load and applies whatever can be fixed from the app. main process,
+// shared with the other BelleCord build.
 //
-// What it checks, and what it does about each:
-//   * old lookups and stuck connections ............. forgets them
-//   * a broken or stale saved copy of Fluxer ........ clears Fluxer's cached files (you stay signed in)
-//   * DNS that can't find Fluxer, blocks it, or gives
-//     out-of-date addresses for any part of it ....... switches to secure DNS (Cloudflare / Google / Quad9), but only
-//                                                      after checking it really helps here; otherwise puts it back
-//   * a "hosts" file line that blocks Fluxer ......... goes around it for BelleCord, and names the lines to delete
-//   * a proxy Fluxer can't get through ............... connects to Fluxer directly instead (only if that works)
-//   * Fluxer's app files not downloading ............. finds out why (IPv6 that doesn't get through, the fast
-//                                                      "QUIC" connection type being broken, out-of-date DNS) and
-//                                                      goes around it
-//   * Fluxer's move from fluxer.app to fluxer.com .... uses whichever address answers
-//   * then it reloads Fluxer, waits for it to start, and writes down exactly what failed to load if it doesn't
-// What no app can fix (a VPN like Cloudflare WARP, a wrong clock, Fluxer itself being down) it names plainly.
-// Nothing it changes can leave BelleCord worse off: every network change is tested, and undone if it doesn't help.
+// - clear host resolver cache, close sockets
+// - clear Fluxer's http cache (keeps login)
+// - DNS failing / blocked / stale -> DoH (cloudflare, google, quad9), only kept if it actually helps
+// - hosts file entries -> host-resolver-rules override, reports the lines
+// - broken proxy -> direct, if direct works
+// - static assets failing -> check IPv6 / QUIC / stale DNS and work around
+// - fluxer.app -> fluxer.com move: use whichever responds
+// - reload, wait for boot, log failed requests
+// reports what can't be fixed here (VPN e.g. WARP, clock skew, Fluxer outage).
+// network changes are verified and rolled back if they don't help.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
 const FLUXER_RE = /(^|\.)(fluxer\.(app|com|gg|media|gift)|fluxerusercontent\.com|fluxerstatic\.com|fluxerstatus\.com)$/i;
-// secure DNS servers, best first (the first is reached by its address, so it works even when names don't)
+// DoH servers in order; first one is by IP so it works without DNS
 const DOH_TEMPLATES = ["https://1.1.1.1/dns-query", "https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query", "https://dns.quad9.net/dns-query"];
 const HOMES = ["https://web.fluxer.app", "https://fluxer.com"];
 const VPN_RE = /warp|cloudflare|wireguard|\bwg\d|nordlynx|nordvpn|proton|mullvad|expressvpn|surfshark|openvpn|tap-windows|\btap\d*\b|\btun\d*\b|vpn|zerotier|hamachi|fortinet|forticlient|globalprotect|pangp|anyconnect|cisco/i;
-// every part of Fluxer its page talks to (from Fluxer's own discovery answer; these are the defaults), and what to ask each
+// hosts the client talks to (defaults from fluxer's discovery doc) and the path to probe on each
 const PARTS = [
   ["webapp", "web.fluxer.app", "/", "the Fluxer page"],
   ["api_public", "api.fluxer.app", "/.well-known/fluxer", "Fluxer's server"],
@@ -35,9 +30,9 @@ const PARTS = [
   ["media", "fluxerusercontent.com", "/", "pictures and videos"],
   ["upload_relay", "uploads.fluxer.app", "/", "uploads"],
 ];
-const MUST = new Set(["web.fluxer.app", "api.fluxer.app", "gateway.fluxer.app"]); // (Fluxer can't start without these)
+const MUST = new Set(["web.fluxer.app", "api.fluxer.app", "gateway.fluxer.app"]);
 
-/** An answer no Fluxer server would ever have: a "blocked" reply from a filter, or nowhere. */
+// sinkhole / private / empty answer
 function blockedIp(ip) {
   ip = String(ip || "").toLowerCase().replace(/^\[|\]$/g, "");
   if (!ip) return true;
@@ -66,7 +61,7 @@ const isHome = (u) => HOMES.includes(String(u || "").replace(/\/+$/, ""));
 const short = (u) => { try { const x = new URL(u); return x.hostname + (x.pathname.length > 32 ? x.pathname.slice(0, 14) + "..." + x.pathname.slice(-16) : x.pathname); } catch { return String(u || "").slice(0, 60); } };
 const mb = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 
-// runs inside Fluxer's page: did Fluxer really come up, and are you signed in?
+// injected: did the app boot, and is there a session?
 const PAGE_PROBE = "(" + function () {
   var path = location.pathname || "/", text = "";
   try { text = (document.body && document.body.innerText || "").replace(/\s+/g, " ").trim().slice(0, 600); } catch (e) {}
@@ -74,39 +69,35 @@ const PAGE_PROBE = "(" + function () {
   var login = /^\/(login|register|authorize|reset|verify)(\/|$)/.test(path) || !!document.querySelector('input[type="password"]');
   var root = document.getElementById("root") || document.body;
   var kids = root ? root.querySelectorAll("*").length : 0;
-  var booting = !!document.getElementById("fluxer-boot-shell") && kids < 25; // (Fluxer's grey "loading" outline, before its code runs)
+  var booting = !!document.getElementById("fluxer-boot-shell") && kids < 25; // skeleton loader, shown before the bundle runs
   var errLine = (text.match(/[^.!?]*(something went wrong|couldn.t (connect|load|reach)|failed to (load|connect)|unable to (connect|load)|reconnecting|offline|no internet)[^.!?]*[.!?]?/i) || [""])[0].trim().slice(0, 160);
   var kind = shell ? "ok" : /^\/migrate/.test(path) ? "migrating" : login ? "login" : errLine ? "error" : booting ? "booting" : kids < 25 ? "blank" : "unknown";
   return { url: location.href, kind: kind, text: errLine };
 }.toString() + ")()";
 
-/**
- * @param {object} o
- *   app, session, webContents, BrowserWindow, shell - Electron's own modules
- *   store: { get(): object, set(changes): void } - where this BelleCord keeps the Fix Fluxer settings
- *   helpLine - who helps this BelleCord's user, said in the app's own voice (or null for none)
- *   partition - Fluxer's saved sign-in (default persist:fluxer); log - optional
- *   https - Node's https module (tests pass a stand-in)
- */
+// o: app, session, webContents, BrowserWindow, shell (electron modules)
+//    store { get(), set(changes) } for fix settings
+//    helpLine (string or null), partition (default persist:fluxer), log?
+//    https (injectable)
 module.exports = function createFluxerFix(o) {
   const { app, session, webContents, BrowserWindow, shell, store } = o;
-  const partitionOf = () => (typeof o.partition === "function" ? o.partition() : o.partition) || "persist:fluxer"; // (the person who's on now)
+  const partitionOf = () => (typeof o.partition === "function" ? o.partition() : o.partition) || "persist:fluxer"; // current profile
   const log = o.log || (() => {});
   const helpLine = o.helpLine === undefined ? "send me a screenshot of this box" : o.helpLine;
   const https = o.https || require("https");
-  const bootWait = o.bootWaitMs || 20000; // (how long Fluxer gets to start after its page loads)
+  const bootWait = o.bootWaitMs || 20000; // boot timeout after page load
   const S = () => { try { return store.get() || {}; } catch { return {}; } };
   const save = (ch) => { try { store.set(ch); } catch {} };
   const fses = () => session.fromPartition(partitionOf());
   const home = () => (isHome(S().home) ? String(S().home).replace(/\/+$/, "") : HOMES[0]);
   let busy = null;
-  // your normal browser (the one links open in), by name: on most Windows computers, Microsoft Edge
+  // default browser name (usually edge on windows)
   const browserName = () => { try { return String(app.getApplicationNameForProtocol("https://fluxer.com/") || "").replace(/\.exe$/i, "").trim(); } catch { return ""; } };
   const inBrowser = () => { const n = browserName(); return n ? "in " + n + " (your normal browser)" : "in your normal browser"; };
 
-  // ---------------- the parts ----------------
+  // probes
   function applyResolver(secure) {
-    // Fluxer's own desktop app always skips the newer "HTTPS record" lookups (some home routers choke on them)
+    // skip HTTPS/SVCB lookups like fluxer's desktop app does (some routers break on them)
     const opts = { enableAdditionalDnsQueryTypes: false, enableHappyEyeballs: true };
     if (secure) Object.assign(opts, { enableBuiltInResolver: true, secureDnsMode: "secure", secureDnsServers: DOH_TEMPLATES });
     try { app.configureHostResolver(opts); return true; } catch (e) { log("resolver: " + (e && e.message || e)); return false; }
@@ -117,7 +108,7 @@ module.exports = function createFluxerFix(o) {
       const ips = ((r && r.endpoints) || []).map((e) => e.address).filter(Boolean);
       return { ips, blocked: ips.length > 0 && ips.every(blockedIp), code: ips.length ? "" : "ERR_NAME_NOT_RESOLVED" };
     } catch (e) {
-      // a lookup that fails is a DNS failure, whatever words the error uses
+      // any lookup error counts as a DNS failure
       const c = errCode(e);
       return { ips: [], blocked: false, code: /^ERR_/.test(c) ? c : /timeout/i.test(c) ? "ERR_DNS_TIMED_OUT" : "ERR_NAME_NOT_RESOLVED" };
     }
@@ -130,7 +121,7 @@ module.exports = function createFluxerFix(o) {
       return { reached: r.status > 0, ok: r.status > 0 && r.status < 500, status: r.status, ms: Date.now() - t0, date: r.headers.get("date") || null, url: r.url || url, body };
     } catch (e) { const code = errCode(e); return { reached: false, ok: false, status: 0, code, kind: kindOf(code), ms: Date.now() - t0 }; }
   }
-  // a whole file, the way Fluxer's page downloads it (counts the bytes; a connection that stalls partway shows here)
+  // full GET like the page does; counts bytes so a mid-transfer stall shows up
   async function download(ses, url, ms) {
     const t0 = Date.now();
     try {
@@ -142,20 +133,18 @@ module.exports = function createFluxerFix(o) {
       return { url, ok: got.status > 0 && got.status < 400, status: got.status, bytes: got.bytes, ms: Date.now() - t0 };
     } catch (e) { const code = errCode(e); return { url, ok: false, status: 0, bytes: 0, code, kind: kindOf(code), ms: Date.now() - t0 }; }
   }
-  // the same file through a plain connection to one exact address (no QUIC, no proxy, no DNS): tells IPv6 from
-  // IPv4 trouble, out-of-date DNS answers, and Chromium's fast "QUIC" connection being broken on this network
+  // same file over plain https to a fixed IP (no QUIC/proxy/DNS): separates IPv6 vs IPv4, stale DNS, broken QUIC
   function probeAt(url, ip, ms) {
     return new Promise((resolve) => {
       const t0 = Date.now();
       let done = false, bytes = 0, req = null;
-      // (finishing never throws, and nothing the connection does afterwards can reach the app: a late error from a
-      // half-open connection, unhandled, would take down BelleCord's window program)
+      // never throw on finish and swallow late socket errors, otherwise a half-open connection can crash main
       const end = (r) => { if (done) return; done = true; clearTimeout(timer); setImmediate(() => { try { req && req.destroy(); } catch {} }); resolve({ ip, ms: Date.now() - t0, bytes, ...r }); };
       const timer = setTimeout(() => end({ ok: false, code: "ETIMEDOUT" }), ms || 20000);
       try {
         const u = new URL(url), family = isV4(ip) ? 4 : 6;
         req = https.request({
-          host: u.hostname, servername: u.hostname, port: 443, path: u.pathname + u.search, method: "GET", agent: false, // (a fresh connection every time: never one left over to another address)
+          host: u.hostname, servername: u.hostname, port: 443, path: u.pathname + u.search, method: "GET", agent: false, // no keep-alive, so sockets aren't reused across IPs
           headers: { "user-agent": "Mozilla/5.0 (BelleCord Fix Fluxer)", accept: "*/*", "accept-encoding": "identity" },
           lookup: (h, opts, cb) => { if (typeof opts === "function") { cb = opts; opts = {}; } process.nextTick(() => { if (opts && opts.all) cb(null, [{ address: ip, family }]); else cb(null, ip, family); }); },
         }, (res) => {
@@ -170,7 +159,7 @@ module.exports = function createFluxerFix(o) {
       } catch (e) { end({ ok: false, code: errCode(e) }); }
     });
   }
-  // secure DNS answers (JSON form) straight from Cloudflare / Google
+  // DoH json queries
   async function dohA(name) {
     const tries = ["https://1.1.1.1/dns-query?name=" + encodeURIComponent(name) + "&type=A", "https://8.8.8.8/resolve?name=" + encodeURIComponent(name) + "&type=A"];
     for (const u of tries) {
@@ -222,7 +211,7 @@ module.exports = function createFluxerFix(o) {
   async function probe(wc) {
     try { return await withTimeout(wc.executeJavaScript(PAGE_PROBE, true), 5000, "page"); } catch (e) { return { url: (() => { try { return wc.getURL(); } catch { return ""; } })(), kind: "unknown", text: "" }; }
   }
-  // while Fluxer's page loads: every file that fails, every error its code prints, and where it goes
+  // capture failed requests, console errors and navigations while the page loads
   function watchPage(ses, wc) {
     const seen = { failed: [], http: [], errors: [], navs: [], crashed: "" };
     const add = (list, item, max) => { if (list.length < (max || 12) && !list.some((x) => JSON.stringify(x) === JSON.stringify(item))) list.push(item); };
@@ -254,7 +243,7 @@ module.exports = function createFluxerFix(o) {
     }
     return { ok: false, endpoints: null };
   }
-  // the files Fluxer's page needs to start (its code), read from the page itself
+  // script urls the page needs to boot, read from the DOM
   function appFiles(html, base) {
     const out = [];
     const re = /<(script|link)\b[^>]*?\b(src|href)\s*=\s*["']([^"']+)["'][^>]*>/gi;
@@ -269,23 +258,23 @@ module.exports = function createFluxerFix(o) {
     return out.sort((a, b) => /\.js(\?|$)/.test(b) - /\.js(\?|$)/.test(a)).slice(0, 4);
   }
 
-  // ---------------- look ----------------
+  // diagnose
   async function diagnose() {
     const ses = fses();
     const s = S();
     const out = { at: new Date().toISOString(), internet: null, clockMin: null, proxy: "?", vpn: vpnAdapters(), hostsFile: hostsFile(), discovery: null, hosts: {}, secureDns: !!s.secureDns, pins: Object.keys(s.pins || {}), direct: !!s.direct, noQuic: !!s.noQuic, home: home(), pages: [] };
-    // is the internet itself up (and is this PC's clock right)?
+    // connectivity + clock
     const net = await reach(session.defaultSession, "https://1.1.1.1/cdn-cgi/trace", 8000);
     const net2 = net.ok ? net : await reach(session.defaultSession, "https://www.google.com/generate_204", 8000);
     out.internet = { ok: net.ok || net2.ok, code: net2.code || net.code || "" };
     const date = net.date || net2.date;
     if (date) { const t = Date.parse(date); if (!isNaN(t)) out.clockMin = Math.round((Date.now() - t) / 60000); }
     try { out.proxy = String(await withTimeout(ses.resolveProxy("https://web.fluxer.app/"), 4000, "proxy")).trim() || "DIRECT"; } catch { out.proxy = "?"; }
-    // is the graphics chip doing the video work? (when it isn't, videos lag)
+    // hardware video decode?
     try { const g = app.getGPUFeatureStatus(); out.gpu = { video: String(g.video_decode || "?"), compositing: String(g.gpu_compositing || "?") }; } catch { out.gpu = null; }
     out.discovery = await discovery(ses);
     const e = (out.discovery && out.discovery.endpoints) || {};
-    // every part of Fluxer the page talks to, as Fluxer itself lists them (plus fluxer.com, where Fluxer is moving)
+    // all endpoints from discovery, plus fluxer.com
     const want = new Map();
     for (const [key, def, ask, what] of PARTS) {
       const h = hostOf(e[key]) || def;
@@ -305,7 +294,7 @@ module.exports = function createFluxerFix(o) {
     return out;
   }
 
-  // ---------------- fix ----------------
+  // fix
   async function fix(progress) {
     if (busy) return busy;
     busy = (async () => {
@@ -339,7 +328,7 @@ module.exports = function createFluxerFix(o) {
       try { await ses.clearStorageData({ storages: ["serviceworkers", "cachestorage", "shadercache"] }); } catch {}
       step("cache", "Cleared Fluxer's saved files (you stay signed in)", "fixed");
 
-      // DNS: any part of Fluxer your DNS can't find, blocks, or gives an out-of-date address for (that doesn't answer)
+      // DNS: hosts that don't resolve, resolve to a block, or resolve to a dead address
       step("dns", "Checking your DNS", "run");
       const dnsBad = Object.keys(H).filter((h) => !blockedByHostsFile.has(h) && (H[h].dns.blocked || (!H[h].dns.ips.length && kindOf(H[h].dns.code) === "dns") || (H[h].differs && !H[h].http.ok)));
       if (dnsBad.length) {
@@ -348,8 +337,7 @@ module.exports = function createFluxerFix(o) {
         try { await ses.clearHostResolverCache(); } catch {}
         const look = await Promise.all(dnsBad.map((h) => resolve(ses, h, true)));
         const again = await Promise.all(dnsBad.map((h) => reach(ses, H[h].url || "https://" + h + "/", 9000)));
-        // secure DNS helped if it finds every one of them, nothing that worked stopped working, and (when some didn't
-        // answer before) at least one of those answers now
+        // DoH helps if it resolves all of them, breaks nothing that worked, and (if some were unreachable) fixes at least one
         const wasDown = dnsBad.map((h, i) => (H[h].http.ok ? -1 : i)).filter((i) => i >= 0);
         const helped = look.every((r) => r.ips.length && !r.blocked) && dnsBad.every((h, i) => !H[h].http.ok || again[i].ok) && (!wasDown.length || wasDown.some((i) => again[i].ok));
         if (helped) { s.secureDns = true; step("dns", "Your DNS gave wrong or out-of-date answers for Fluxer - now using secure DNS instead", "fixed", "Fixed for: " + names + ". Lookups for Fluxer now go to Cloudflare / Google over an encrypted connection, around your router's or provider's DNS. (Fluxer's status page has a notice about out-of-date DNS answers since it moved its servers.)"); finding = finding || "Your DNS was giving out wrong or out-of-date addresses for " + names + "."; }
@@ -361,7 +349,7 @@ module.exports = function createFluxerFix(o) {
         else { applyResolver(false); s.secureDns = false; step("dns", "Secure DNS stopped working on this network, so it's off again", "fixed"); }
       } else { applyResolver(false); step("dns", "Your DNS finds every part of Fluxer", "ok"); }
 
-      // the hosts file (DNS can't go around this one, so BelleCord maps those names itself)
+      // hosts file: DoH doesn't bypass it, so map those names ourselves
       if (before.hostsFile.hosts.length) {
         step("hosts", "Your computer's hosts file blocks Fluxer - going around it", "run");
         const pins = {};
@@ -378,7 +366,7 @@ module.exports = function createFluxerFix(o) {
         if (old.length) { for (const h of old) { delete s.pins[h]; delete s.pinWhy[h]; } step("hosts", "Your hosts file doesn't block Fluxer anymore - workaround removed", "fixed"); }
       }
 
-      // a proxy Fluxer can't get through
+      // proxy
       const viaProxy = before.proxy !== "?" && !/^DIRECT\b/i.test(before.proxy);
       if (viaProxy || s.direct) {
         step("proxy", "Checking your computer's proxy", "run");
@@ -392,24 +380,24 @@ module.exports = function createFluxerFix(o) {
         } else { try { await ses.setProxy({ mode: "system" }); } catch {} s.direct = false; step("proxy", "Going back to your computer's normal connection settings", "fixed"); }
       }
 
-      // clock (secure sites refuse to connect when it's far off)
+      // clock skew breaks TLS
       if (before.clockMin != null && Math.abs(before.clockMin) >= 5) {
         step("clock", "Your computer's clock is " + Math.abs(before.clockMin) + " minutes " + (before.clockMin > 0 ? "ahead" : "behind"), "fail", "Secure sites like Fluxer refuse to connect when the clock is wrong.");
         youDo.push({ text: "Your computer's clock is off by " + Math.abs(before.clockMin) + " minutes. Open Windows Settings › Time & language › Date & time and press \"Sync now\".", action: "time" });
         finding = finding || "Your computer's clock is wrong, so secure sites refuse to connect.";
       }
 
-      // videos: decoded by the graphics chip, or by the processor alone (slow: videos lag and pause)
+      // video decode: gpu vs software
       if (before.gpu && before.gpu.video !== "?" && !/^enabled/.test(before.gpu.video)) {
         step("video", "Videos are played without your graphics chip, so they can lag", "warn", "Video decoding: " + before.gpu.video + " · compositing: " + before.gpu.compositing);
         youDo.push({ text: "Update your graphics driver (NVIDIA, AMD or Intel, from their website or Windows Update), then restart your computer. Videos in BelleCord use the graphics chip once the driver is up to date." });
       }
 
-      // which address to use (Fluxer is moving from web.fluxer.app to fluxer.com)
+      // base url (web.fluxer.app -> fluxer.com)
       step("where", "Finding which Fluxer address answers", "run");
       try { await ses.clearHostResolverCache(); } catch {}
       const [oldA, newA] = await Promise.all([reach(ses, HOMES[0] + "/channels/@me", 10000), reach(ses, HOMES[1] + "/channels/@me", 10000)]);
-      // the hosts-file workaround only starts after a restart: an address it covers counts as answering
+      // resolver rules only apply after restart; treat covered hosts as reachable
       const pinnedOld = pinsRule(s.pins) !== pinRule0 && !!s.pins[hostOf(HOMES[0])];
       let where = home();
       if (oldA.ok || pinnedOld) where = HOMES[0];
@@ -428,7 +416,7 @@ module.exports = function createFluxerFix(o) {
         if (before.internet.ok && !vpn.length && oldA.kind !== "tls") youDo.push({ text: "Your internet works but Fluxer doesn't answer at all. If it works on your phone on the same Wi-Fi, something on this computer is blocking it (antivirus or firewall); if not, Fluxer may be down for a bit." });
       }
 
-      // Fluxer's app files: the page is only an empty frame until its code (from fluxerstatic.com) downloads
+      // static assets: the page is an empty shell until the bundle from fluxerstatic.com loads
       let files = null;
       const list = appFiles(where === HOMES[1] ? newA.body : oldA.body, where + "/");
       if (list.length && (oldA.ok || newA.ok)) {
@@ -441,7 +429,7 @@ module.exports = function createFluxerFix(o) {
         else {
           const first = bad[0], fh = hostOf(first.url);
           step("files", "Fluxer's app files don't download from " + fh + " - finding out why", "run", short(first.url) + ": " + (first.code || "HTTP " + first.status));
-          // ask the same file through each address, over a plain connection
+          // fetch the same file via each IP over plain https
           const sys = await resolve(ses, fh, false), doh = await dohA(fh);
           const v6 = sys.ips.filter((ip) => !isV4(ip) && !blockedIp(ip)).slice(0, 1), v4 = sys.ips.filter((ip) => isV4(ip) && !blockedIp(ip)).slice(0, 1);
           const d4 = doh.filter((ip) => !v4.includes(ip)).slice(0, 1);
@@ -452,7 +440,7 @@ module.exports = function createFluxerFix(o) {
           const sysV4ok = v4.some((ip) => by(ip) && by(ip).ok);
           let did = false;
           if (v6.length && !okV6.length && okV4.length) {
-            // IPv6 to Fluxer doesn't get through on this network (IPv4 does): BelleCord uses IPv4 for Fluxer
+            // IPv6 broken, IPv4 fine: force IPv4 for fluxer
             for (const h of new Set([fh, ...Object.keys(H).filter((x) => H[x].v6 && x !== "fluxer.com")])) {
               const ips = h === fh ? okV4 : (H[h].dns.ips.filter(isV4).length ? H[h].dns.ips.filter(isV4) : H[h].doh);
               if (ips.length && !s.pins[h]) { s.pins[h] = ips.slice(0, 4); s.pinWhy[h] = "ipv4"; did = true; }
@@ -463,7 +451,7 @@ module.exports = function createFluxerFix(o) {
             }
           }
           if (!did && sysV4ok && !quic0) {
-            // a plain connection to the very same address works, so Chromium's fast "QUIC" connection is what fails here
+            // plain https to the same IP works, so it's QUIC
             s.noQuic = true; did = true;
             step("files", "Your network breaks the fast connection type (QUIC) Fluxer's files come over - BelleCord now uses the regular one", "fixed", "Some routers and antivirus programs drop QUIC partway through.");
             finding = finding || "Your network breaks the fast \"QUIC\" connection that Fluxer's files come over.";
@@ -485,19 +473,19 @@ module.exports = function createFluxerFix(o) {
 
       if (pinsRule(s.pins) !== pinRule0 || !!s.noQuic !== quic0) restartNeeded = true;
       save(s);
-      // reload Fluxer, wait for it to start, and look at what really came up
+      // reload and verify boot
       let page = null, watched = null;
       const views = fluxerViews();
       if (restartNeeded) step("reload", "Restart BelleCord to finish - Fluxer opens with the fix", "warn");
       else if (views.length) {
         step("reload", "Reloading Fluxer", "run");
-        const wc = views[0]; // (one Fluxer view is enough to judge by)
+        const wc = views[0];
         const w = watchPage(ses, wc);
         const wait = waitLoad(wc, 30000);
         try { if (moved || !/^https:\/\/([a-z0-9-]+\.)*fluxer\.(app|com)\//i.test(wc.getURL())) wc.loadURL(where + "/channels/@me"); else wc.reloadIgnoringCache(); } catch {}
         const r = await wait;
         if (r.ok) {
-          // Fluxer draws a grey outline first and starts once its code is in: give it up to 20 seconds
+          // skeleton first, app boots once the bundle loads; allow 20s
           const t0 = Date.now();
           await new Promise((res) => setTimeout(res, 3500));
           page = await probe(wc);
@@ -513,7 +501,7 @@ module.exports = function createFluxerFix(o) {
         if (page.crashed) what.push("The page crashed (" + page.crashed + ")");
         step("reload", say[0], say[1], [page.text, ...what].filter(Boolean).join("\n"));
         if (page.kind === "login") youDo.push({ text: "Sign in to Fluxer on the Fluxer side (just once). Your other devices stay signed in." });
-        // files that failed over the fast "QUIC" connection: BelleCord uses the regular one from the next start
+        // files that failed over QUIC: disable QUIC from next launch
         if (say[1] === "fail" && !quic0 && !s.noQuic && page.failed.some((f) => /QUIC/.test(f.error))) {
           s.noQuic = true; restartNeeded = true; save(s);
           step("reload", "Fluxer's files fail over the fast connection type (QUIC) on your network - restart BelleCord to use the regular one", "warn", what.join("\n"));
@@ -563,7 +551,7 @@ module.exports = function createFluxerFix(o) {
     return L.join("\n");
   }
 
-  // ---------------- the last resort: sign out of Fluxer here and start fresh ----------------
+  // last resort: clear fluxer session data
   async function reset() {
     const ses = fses();
     try { await ses.clearStorageData(); } catch {}
@@ -574,7 +562,7 @@ module.exports = function createFluxerFix(o) {
     for (const wc of fluxerViews()) { try { wc.loadURL(home() + "/channels/@me"); } catch {} }
     return { ok: true };
   }
-  // Fluxer on its own, with none of BelleCord's changes (tells whether BelleCord's look is what breaks it)
+  // open fluxer without our CSS/injections
   function openClean() {
     try {
       const w = new BrowserWindow({ width: 1200, height: 860, title: "Fluxer (clean test)", autoHideMenuBar: true, backgroundColor: "#313338", webPreferences: { partition: partitionOf(), contextIsolation: true, sandbox: true } });
@@ -582,7 +570,7 @@ module.exports = function createFluxerFix(o) {
       return { ok: true };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   }
-  // Fluxer in your normal browser (tells whether it's BelleCord or this computer)
+  // open in the default browser
   function openBrowser() { try { shell.openExternal(home() + "/channels/@me"); return { ok: true }; } catch (e) { return { ok: false }; } }
   function openHelp(what) {
     try {
@@ -593,15 +581,15 @@ module.exports = function createFluxerFix(o) {
     return null;
   }
 
-  // ---------------- start-up ----------------
-  // before the app is ready: the address workarounds and "no QUIC" have to be in place before anything connects
+  // startup
+  // before ready: resolver rules and --disable-quic must be set before any connection
   function beforeReady() {
     const s = S();
     const rule = pinsRule(s.pins);
     if (rule) { try { app.commandLine.appendSwitch("host-resolver-rules", rule); } catch {} }
     if (s.noQuic) { try { app.commandLine.appendSwitch("disable-quic"); } catch {} }
   }
-  // once ready: the DNS settings, and a check that secure DNS still works on this network (never stuck without DNS)
+  // after ready: DNS config, and check DoH still works on this network (fall back if not)
   async function afterReady() {
     const s = S();
     applyResolver(!!s.secureDns);
@@ -611,7 +599,7 @@ module.exports = function createFluxerFix(o) {
       if (!r.ips || !r.ips.length || r.blocked) { applyResolver(false); save({ secureDns: false }); log("secure DNS didn't work on this network, so it's off"); }
     }
     if (s.pins && Object.keys(s.pins).length) {
-      // refresh the pinned addresses (in the background; used from the next start)
+      // refresh pinned IPs in the background for next launch
       (async () => { const next = {}; for (const h of Object.keys(s.pins)) { const ips = await dohA(h); next[h] = ips.length ? ips.slice(0, 4) : s.pins[h]; } save({ pins: next }); })().catch(() => {});
     }
   }

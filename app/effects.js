@@ -1,8 +1,5 @@
-// Star effects, inside Fluxer's and Discord's pages: once a message has 2 ⭐, its star reaction glows and sparkles,
-// a little tag says how many more it needs for the next reward (3 = 💗, 5 = ✨, 7 = 🏆), and each new star pops a
-// small burst. People on plain Discord and Fluxer get my bot's homemade version instead (a few sparkle reactions
-// 🌠 💫 🎇 🎆 that come and go): those are hidden here, since you already see these.
-// Turn the star effects off in Performance on the dashboard. With Animations off they still glow, just without moving.
+// star reaction effects injected into both sites: glow at 2+, next-milestone tag (3/5/7), burst on new star.
+// hides the bot's fallback sparkle reactions. toggle in perf; static when motion is off.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -37,7 +34,7 @@
     function isStar(p) { var e = emojiOf(p); return /^⭐\|/.test(e) || /^:?star:?\|/i.test(e) || /(^|[\/_-])2b50([._-]|$)/i.test(e) || /\|\|.*⭐/.test(e); }
     function isFx(p) { var e = emojiOf(p); for (var i = 0; i < FX.length; i++) if (e.indexOf(FX[i]) >= 0) return true; return false; }
     function count(p) { var w = p.querySelector('[data-flx$="count-wrapper"],[class*="countWrapper"],[class*="reactionCount"]') || p; var m = /\d+/.exec(w.textContent || ""); return m ? Number(m[0]) : 0; }
-    function holder(p) { return p.matches('div[class*="reactionInner"]') && p.parentElement ? p.parentElement : p; } // (Discord: the whole pill)
+    function holder(p) { return p.matches('div[class*="reactionInner"]') && p.parentElement ? p.parentElement : p; } // discord: whole pill
     function burst(p, big) {
       if (window.__bcStarStill) return;
       var r = p.getBoundingClientRect();
@@ -61,7 +58,7 @@
       var list = document.querySelectorAll(PILLS);
       for (var i = 0; i < list.length; i++) {
         var pill = list[i], p = holder(pill), n = count(pill);
-        // my bot's homemade sparkles: hidden while they're only the bot's
+        // hide the bot's sparkle reactions
         if (isFx(pill)) { var off = n <= 1; if (off && p.style.display !== "none") { p.style.display = "none"; p.setAttribute("data-bcfx", "1"); } else if (!off && p.getAttribute("data-bcfx")) { p.style.display = ""; p.removeAttribute("data-bcfx"); } continue; }
         if (!window.__bcStarOn || !isStar(pill)) { if (p.hasAttribute("data-bcslv")) clear(p); continue; }
         var lv = n >= 7 ? "7" : n >= 5 ? "5" : n >= 3 ? "3" : n >= 2 ? "2" : null;
@@ -90,6 +87,6 @@
     try { w.executeJavaScript("(" + PAGE.toString() + ")(" + JSON.stringify(on()) + "," + JSON.stringify(still()) + ")").catch(() => {}); } catch {}
   }
   for (const side of ["fluxer", "discord"]) { const w = $("wv-" + side); if (w) w.addEventListener("dom-ready", () => setTimeout(() => put(side), 1500)); }
-  // (again now and then: the sites change pages without reloading, and the switch can change)
+  // re-apply periodically (spa navigation, setting changes)
   setInterval(() => { if (window.bcPrefsReady) { put("fluxer"); put("discord"); } }, 5000);
 })();

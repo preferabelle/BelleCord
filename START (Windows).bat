@@ -12,7 +12,7 @@ goto run
 echo Getting BelleCord's parts ready. The first time this downloads about 100 MB, so give it a few minutes...
 call npm install --include=dev --include=prod --no-audit --no-fund --ignore-scripts=false
 if errorlevel 1 goto installfail
-rem Electron fetches its program in a second step; if that step was skipped, do it now
+rem electron's postinstall can get skipped, run it manually
 if not exist "node_modules\electron\dist\electron.exe" if exist "node_modules\electron\install.js" (
   echo Downloading the app itself...
   call node "node_modules\electron\install.js"

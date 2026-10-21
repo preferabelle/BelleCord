@@ -1,17 +1,14 @@
-// People on this computer. Everyone who uses BelleCord here gets their own Fluxer and Discord sign-ins, their own
-// side-panel sign-ins (TikTok, Pinterest, X, your links) and their own BelleCord settings (themes, skins, badges,
-// countdowns...). The round button at the bottom of the server list swaps between them in one click: a colored
-// circle sweeps out from the button, the window reloads as the other person underneath it, and the circle sweeps
-// back into the button. Add, rename, recolor, give a picture to, or remove people from its menu.
+// profiles: separate partitions and settings per person, switcher at the bottom of the server rail.
+// switch animation: color circle expands, window reloads under it, circle collapses back.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const A = window.bcApp || {};
   const H = A.profiles || null;
   const now = A.profile || { active: "main", suffix: "", list: [] };
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { esc } = window.bcUtil;
 
-  // ---- first: each site opens in this person's own saved sign-in (before anything else touches the sites) ----
+  // set partitions before anything loads the webviews
   for (const w of document.querySelectorAll("webview[data-part]")) {
     if (w.getAttribute("partition")) continue;
     w.setAttribute("partition", "persist:" + w.dataset.part + (now.suffix || ""));
@@ -30,7 +27,7 @@
   css.textContent = [
     ".pf-face{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:radial-gradient(circle at 30% 25%,color-mix(in srgb,var(--pc) 60%,#fff),var(--pc) 70%);color:#fff;font-weight:800;flex:none;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}",
     ".pf-face img{width:100%;height:100%;object-fit:cover}",
-    // (a slim strip in the bottom-left corner, under the server list: your picture, your name, and the swap arrows)
+    // bottom-left strip: avatar, name, swap icon
     "#r-who{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);margin:2px 6px 0;padding:4px 6px;border-radius:10px;background:color-mix(in srgb,var(--bg) 55%,#000);color:var(--text);text-align:left;min-height:34px;transition:background .15s}",
     "#r-who:hover{background:color-mix(in srgb,var(--bg) 35%,#000);filter:none}#r-who .pf-face{transition:transform .25s cubic-bezier(.3,1.4,.5,1)}#r-who:hover .pf-face{transform:scale(1.08)}",
     "#r-who .nm{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#r-who .sw{font-size:13px;color:var(--dim);flex:none}",
@@ -52,7 +49,7 @@
     "#whomenu .cols{display:flex;gap:6px;flex-wrap:wrap}#whomenu .cols button{width:24px;height:24px;border-radius:50%;padding:0;background:var(--c);box-shadow:inset 0 0 0 2px rgba(255,255,255,.15)}#whomenu .cols button.on{box-shadow:0 0 0 2px var(--side),0 0 0 4px var(--c)}",
     "#whomenu .btns{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}#whomenu .btns .rm{margin-right:auto;color:#f23f43;background:transparent}",
     "#whomenu .note{font-size:11.5px;color:var(--dim);line-height:1.35;margin:0}",
-    // the swap: a circle of their color sweeps out of the button, then back into it after the reload
+    // switch animation
     "#bcswap{position:fixed;inset:0;z-index:2147483601;pointer-events:all;display:flex;align-items:center;justify-content:center}",
     "#bcswap .wipe{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--swapc) 70%,#fff 10%),var(--swapc) 60%,color-mix(in srgb,var(--swapc) 55%,#000));clip-path:circle(0 at var(--sx) var(--sy));transition:clip-path .45s cubic-bezier(.7,0,.25,1)}",
     "#bcswap.open .wipe{clip-path:circle(150vmax at var(--sx) var(--sy))}",
@@ -66,7 +63,7 @@
   ].join("\n");
   document.head.appendChild(css);
 
-  // ---- the button ----
+  // button
   function drawButton() {
     const bottom = document.querySelector("#rail .bottom");
     if (!bottom) return;
@@ -74,9 +71,9 @@
     if (!b) {
       b = document.createElement("button");
       b.id = "r-who";
-      bottom.appendChild(b); // (the very bottom: the bottom-left corner of the window)
+      bottom.appendChild(b);
       b.onclick = (e) => { e.stopPropagation(); toggleMenu(); };
-      // (right-click: straight back to whoever was on before, no menu)
+      // right-click: back to the previous profile
       b.oncontextmenu = (e) => { e.preventDefault(); const prev = lastOther(); if (prev) swapTo(prev); else toggleMenu(true); };
     }
     const p = me(), i = list.indexOf(p), others = list.filter((x) => x !== p);
@@ -84,10 +81,10 @@
     b.title = nameOf(p, i) + (others.length ? " · click to swap people (Ctrl+Shift+1 to " + list.length + "), right-click to swap back" : " · click to add someone who shares this computer");
     b.setAttribute("aria-label", b.title);
   }
-  // who was on before (remembered between swaps)
+  // previous profile
   const lastOther = () => { try { const id = localStorage.getItem("bcPrevProfile"); return id && id !== active && list.some((x) => x.id === id) ? id : (list.find((x) => x.id !== active) || {}).id; } catch (e) { return null; } };
 
-  // ---- the menu ----
+  // menu
   let mode = "list", editing = null;
   function toggleMenu(force) {
     let m = $("whomenu");
@@ -144,7 +141,7 @@
     };
   }
   async function saveEdit(a) { const r = await H.edit(a); if (r && r.list) { list = r.list; drawButton(); } }
-  // (a picture is made small and round-friendly before it's saved)
+  // resize avatar before saving
   function shrink(f) {
     return new Promise((res) => {
       const img = new Image(), url = URL.createObjectURL(f);
@@ -154,7 +151,7 @@
     });
   }
 
-  // ---- the swap ----
+  // switch
   function overlay() {
     let o = $("bcswap");
     if (!o) { o = document.createElement("div"); o.id = "bcswap"; o.innerHTML = '<div class="wipe"></div><div class="card"></div>'; document.body.appendChild(o); }
@@ -178,10 +175,10 @@
     setTimeout(async () => {
       const r = await H.switchTo(id).catch(() => null);
       if (!r || !r.ok) { try { sessionStorage.removeItem("bcSwapTo"); } catch {} o.classList.remove("open"); o.querySelector(".card").classList.remove("show"); setTimeout(() => o.remove(), 700); }
-      // (the window reloads as them, under the cover)
+      // reload under the cover
     }, still() ? 50 : 480);
   }
-  // after the reload: "Hi, Sam", then the circle sweeps back into the button
+  // after reload: greeting, then collapse the circle
   function arrive() {
     let s = null; try { s = JSON.parse(sessionStorage.getItem("bcSwapTo") || "null"); sessionStorage.removeItem("bcSwapTo"); } catch {}
     if (!s || Date.now() - s.at > 15000) return;
@@ -190,7 +187,7 @@
     o.style.setProperty("--swapc", s.color || colorOf(p, i));
     const at = from($("r-who")); o.style.setProperty("--sx", at.x); o.style.setProperty("--sy", at.y);
     o.classList.add("open");
-    void o.offsetWidth; // (already fully open: no sweep on the way in, it was hidden under the cover)
+    void o.offsetWidth; // cover is already full size, only animate out
     const card = o.querySelector(".card");
     card.innerHTML = face(p, 96) + "<b>Hi, " + esc(nameOf(p, i)) + "!</b><small>Here's your BelleCord</small>";
     card.classList.add("show");
@@ -206,15 +203,15 @@
     }, still() ? 300 : 650);
   }
 
-  // ---- shortcuts: Ctrl+Shift+1 to 8 (Cmd+Shift on a Mac) swaps straight to that person ----
+  // ctrl/cmd+shift+1..8
   const byNumber = (n) => { const p = list[n - 1]; if (p && p.id !== active) swapTo(p.id); };
-  if (A.onProfileKey) A.onProfileKey(byNumber); // (while you're in Fluxer or Discord)
+  if (A.onProfileKey) A.onProfileKey(byNumber); // also forwarded from webviews
   addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && /^Digit[1-8]$/.test(e.code)) { e.preventDefault(); byNumber(Number(e.code.slice(5))); } });
 
-  // ---- start ----
+  // init
   drawButton();
   arrive();
-  // (once the settings are in: the first person's name comes from what they told BelleCord, if they never named it here)
+  // after prefs: default the main profile's name to the saved name
   const wait = setInterval(() => {
     if (!window.bcPrefsReady) return;
     clearInterval(wait);

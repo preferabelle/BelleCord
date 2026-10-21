@@ -1,8 +1,5 @@
-// Motion: how BelleCord moves. Off, Smooth (the default) or Ultra, picked in App > Animations.
-// How each one looks is in shell.css ("motion"). This file does the parts that need code: sliding the sides in from
-// the right direction, the dashboard's entrance, and Ultra's extras (osu!-style triangles drifting up the dashboard
-// banner, cards that tilt toward the mouse, ripples where you click). Nothing here runs when it isn't on screen, and
-// only Ultra draws anything every frame.
+// animation levels (off/smooth/ultra). css does most of it; this handles directional side transitions,
+// the dashboard entrance, and ultra-only effects (triangles, card tilt, click ripples). only ultra runs a raf loop.
 (function () {
   "use strict";
   const body = document.body;
@@ -10,9 +7,8 @@
   const level = () => body.dataset.motion || "smooth";
   const slide = () => parseFloat(getComputedStyle(body).getPropertyValue("--slide")) || 14;
 
-  // ---------------- switching sides ----------------
-  // the side coming in starts just off to one side (or below, for the dashboard) and the one going out heads the
-  // other way, so it feels like moving along a row: Fluxer, Discord, with the dashboard underneath
+  // side transitions: incoming slides in from its direction, outgoing slides the other way
+  // (order: fluxer, discord, dashboard below)
   const prime = (el, vars) => { if (!el) return; el.style.transition = "none"; for (const k in vars) el.style.setProperty(k, vars[k]); void el.offsetWidth; el.style.transition = ""; };
   const aim = (el, vars) => { if (!el) return; for (const k in vars) el.style.setProperty(k, vars[k]); };
   const panesOf = (m) => (m === "both" ? ["fluxer", "discord"] : [m]);
@@ -20,7 +16,7 @@
   function beforeMode(from, to) {
     if (level() === "off" || !from || from === to) return;
     const d = slide(), into = panesOf(to), out = panesOf(from).filter((p) => !into.includes(p));
-    let a, b; // (where the incoming side starts, and where the outgoing one goes)
+    let a, b;
     if (to === "dash") { a = { "--px": "0px", "--py": d + "px", "--ps": "1" }; b = { "--px": "0px", "--py": "0px", "--ps": ".97" }; }
     else if (from === "dash") { a = { "--px": "0px", "--py": "0px", "--ps": ".97" }; b = { "--px": "0px", "--py": d + "px", "--ps": "1" }; }
     else if (to === "both" || from === "both") { a = b = { "--px": "0px", "--py": "0px", "--ps": ".985" }; }
@@ -28,7 +24,7 @@
     for (const p of into) prime($(p), a);
     for (const p of out) aim($(p), b);
   }
-  // the dashboard: its sections float up one after another
+  // dashboard sections stagger in
   let playT = 0;
   function afterMode(to) {
     if (to !== "dash" || level() === "off") return;
@@ -39,7 +35,7 @@
     wakeTriangles();
   }
 
-  // the option you just picked does a little bounce (the list is drawn again on every pick, so it's found again first)
+  // bounce the picked option (list re-renders, so query it again first)
   document.addEventListener("click", (e) => {
     if (level() === "off") return;
     const el = e.target.closest && e.target.closest("[data-cat][data-k],.tpl[data-i],.tpl[data-id]");
@@ -48,7 +44,7 @@
     requestAnimationFrame(() => { const now = document.querySelector(sel); if (now) { now.classList.remove("bc-pick"); void now.offsetWidth; now.classList.add("bc-pick"); setTimeout(() => now.classList.remove("bc-pick"), 900); } });
   }, true);
 
-  // ---------------- Ultra: triangles drifting up the dashboard banner (like osu!'s menus) ----------------
+  // ultra: rising triangles on the banner (osu! style)
   const tri = { canvas: null, ctx: null, list: [], raf: 0, last: 0, colors: [], colorsAt: 0 };
   const showing = () => level() === "ultra" && body.dataset.mode === "dash" && !document.hidden && !!$("hero");
   function colors() {
@@ -58,12 +54,12 @@
     tri.colorsAt = performance.now();
   }
   function spawn(w, h, anywhere) {
-    const s = 14 + Math.pow(Math.random(), 2.2) * 70; // (mostly small, a few big)
+    const s = 14 + Math.pow(Math.random(), 2.2) * 70; // mostly small, a few big
     return { x: Math.random() * w, y: anywhere ? Math.random() * (h + s) : h + s, s, v: 9 + (90 - s) * 0.22 + Math.random() * 10, c: Math.floor(Math.random() * 3), a: 0.07 + Math.random() * 0.13, r: (Math.random() - 0.5) * 0.25 };
   }
   function frame(now) {
     tri.raf = 0;
-    if (!showing()) { if (level() !== "ultra") stopTriangles(); return; } // (picked up again when the dashboard comes back)
+    if (!showing()) { if (level() !== "ultra") stopTriangles(); return; } // resumes when the dashboard is shown again
     const hero = $("hero"), c = tri.canvas, ctx = tri.ctx;
     const w = hero.clientWidth, h = hero.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
@@ -78,7 +74,7 @@
       const t = tri.list[i];
       t.y -= t.v * dt;
       if (t.y + t.s < 0) { tri.list[i] = spawn(w, h, false); continue; }
-      const fade = Math.min(1, (h - t.y + t.s) / (h * 0.35)); // (they fade in as they come up from the bottom)
+      const fade = Math.min(1, (h - t.y + t.s) / (h * 0.35)); // fade in from the bottom
       ctx.globalAlpha = t.a * Math.max(0, fade);
       ctx.fillStyle = tri.colors[t.c];
       const k = t.s * 0.866;
@@ -105,7 +101,7 @@
   document.addEventListener("visibilitychange", wakeTriangles);
   setInterval(wakeTriangles, 1000);
 
-  // ---------------- Ultra: cards lean toward the mouse, the banner follows it a little ----------------
+  // ultra: card tilt + banner parallax
   let tiltEl = null, tiltX = 0, tiltY = 0, tiltRaf = 0, heroEl = null;
   const TILT = ".vcard,.skin,.tpl,.gbgames button";
   function untilt() { if (tiltEl) { tiltEl.classList.remove("tilt"); tiltEl.style.removeProperty("--rx"); tiltEl.style.removeProperty("--ry"); } tiltEl = null; }
@@ -134,7 +130,7 @@
   }
   function onLeave() { untilt(); if (heroEl) { heroEl.style.setProperty("--hx", "0px"); heroEl.style.setProperty("--hy", "0px"); } }
 
-  // ---------------- Ultra: a ripple where you click a button ----------------
+  // ultra: click ripple
   function onDown(e) {
     const b = e.target && e.target.closest ? e.target.closest("button") : null;
     if (!b || b.disabled || b.classList.contains("ri") || b.closest("#bar") || b.offsetWidth < 24) return;
@@ -149,7 +145,7 @@
     setTimeout(() => box.remove(), 600);
   }
 
-  // ---------------- the setting ----------------
+  // setting
   let extras = false;
   function set(l) {
     l = l === "off" || l === "ultra" ? l : "smooth";

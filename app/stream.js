@@ -1,21 +1,19 @@
-// Streams follow you: if you're watching a stream on one side (Fluxer or Discord) and switch to the other side or
-// the dashboard, it keeps playing in a small window in the corner. Drag it anywhere, resize it from its top-left
-// corner, double-click it to go back, or close it. The small window is that side's real page, shrunk: inside it a
-// copy of the stream's picture covers everything else (the same live video shown twice costs almost nothing).
+// stream pip: switching away from a side with a live stream shrinks that webview into a draggable,
+// resizable corner window with only the stream visible.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const body = document.body;
   const get = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
   const put = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-  const KEY = "bcStreamMini"; // "0": streams stay where they are
+  const KEY = "bcStreamMini"; // "0" = off
   const on = () => get(KEY) !== "0";
   const SIDES = ["fluxer", "discord"];
   const name = (s) => (s === "fluxer" ? "Fluxer" : "Discord");
   const wv = (s) => $("wv-" + s);
   const run = async (v, code) => { try { return v && v.executeJavaScript ? await v.executeJavaScript(code) : null; } catch { return null; } };
 
-  // ---- inside the side's own page: find someone else's live video, and show it alone ----
+  // injected: find a remote live video and show it alone
   const PAGE = "(" + function () {
     if (window.__bcMini) return 1;
     var remote = function (v) {
@@ -23,7 +21,7 @@
         var s = v.srcObject; if (!s || !s.getVideoTracks) return false;
         var t = s.getVideoTracks()[0]; if (!t || t.readyState !== "live") return false;
         var st = t.getSettings ? t.getSettings() : {};
-        return !st.displaySurface && !st.groupId; // (your own screen share has displaySurface, your own camera a groupId)
+        return !st.displaySurface && !st.groupId; // local screen share has displaySurface, local camera has groupId
       } catch (e) { return false; }
     };
     var best = function () {
@@ -31,7 +29,7 @@
       for (var i = 0; i < vs.length; i++) {
         var v = vs[i];
         if (v.id === "bc-mini-video" || !v.videoWidth || !remote(v)) continue;
-        var sc = v.videoWidth * v.videoHeight * (v.closest && v.closest('[data-source="screen_share"]') ? 4 : 1); // (a screen share beats a camera)
+        var sc = v.videoWidth * v.videoHeight * (v.closest && v.closest('[data-source="screen_share"]') ? 4 : 1); // screen share wins over camera
         if (sc > score) { score = sc; pick = v; }
       }
       return pick;
@@ -71,7 +69,7 @@
   ].join("\n");
   document.head.appendChild(css);
 
-  // ---- the small window ----
+  // mini window
   const mini = { side: null, W: 0, H: 0 };
   const geo = () => { let g = null; try { g = JSON.parse(get("bcMiniGeo") || "null"); } catch {} return g && g.vw ? g : { r: 20, b: 20, vw: 420 }; };
   const saveGeo = (g) => put("bcMiniGeo", JSON.stringify(g));
@@ -84,7 +82,7 @@
     const s = p.style;
     s.setProperty("--mw", mini.W + "px"); s.setProperty("--mh", mini.H + "px"); s.setProperty("--mk", String(k));
     s.setProperty("--mr", r + "px"); s.setProperty("--mb", b + "px");
-    const box = p.getBoundingClientRect(); // (measured: the handle goes exactly where the window really is)
+    const box = p.getBoundingClientRect(); // measured so the handle lines up with the real window
     Object.assign(ctl.style, box.width > 20 ? { left: box.left + "px", top: box.top + "px", width: box.width + "px", height: box.height + "px" } : { left: innerWidth - r - vw + "px", top: innerHeight - b - vh + "px", width: vw + "px", height: vh + "px" });
   }
   setInterval(() => { if (mini.side && ctl && !ctl.classList.contains("drag")) place(); }, 1000);
@@ -103,7 +101,7 @@
     ctl.addEventListener("pointermove", (e) => {
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-      saveGeo(drag.grip ? { ...drag.g, vw: drag.g.vw - dx } : { ...drag.g, r: drag.g.r - dx, b: drag.g.b - dy }); // (the grip is top-left: dragging out makes it bigger)
+      saveGeo(drag.grip ? { ...drag.g, vw: drag.g.vw - dx } : { ...drag.g, r: drag.g.r - dx, b: drag.g.b - dy }); // grip is top-left, dragging outward grows it
       place();
     });
     const end = () => { if (!drag) return; drag = null; ctl.classList.remove("drag"); };
@@ -139,7 +137,7 @@
   }
   function openBig() { const side = mini.side; closeMini(); if (side && window.bcSetMode) window.bcSetMode(side); }
 
-  // ---- watching both sides for a live stream (every 2 seconds, one quick look) ----
+  // poll both sides for a live stream every 2s
   const live = { fluxer: null, discord: null };
   const full = { fluxer: { w: 1280, h: 760 }, discord: { w: 1280, h: 760 } };
   const showing = (s) => { const m = body.dataset.mode; return m === s || m === "both"; };
@@ -149,24 +147,24 @@
       if (showing(s) && mini.side !== s) { const p = $(s); if (p && p.clientWidth > 400 && p.clientHeight > 300) full[s] = { w: p.clientWidth, h: p.clientHeight }; }
       await run(v, PAGE);
       live[s] = await run(v, "window.__bcStreamNow ? window.__bcStreamNow() : null");
-      if (mini.side === s && !live[s]) closeMini(); // (the stream ended)
+      if (mini.side === s && !live[s]) closeMini(); // stream ended
     }
     button();
   }
   setInterval(poll, 2000); setTimeout(poll, 1500);
 
-  // switching away from a side while its stream is playing: it goes small
+  // switching away from a playing stream: minimize
   let lastMode = body.dataset.mode;
   new MutationObserver(() => {
     const m = body.dataset.mode;
     if (m === lastMode) return;
     const was = lastMode; lastMode = m;
-    if (mini.side && showing(mini.side)) closeMini(); // (back on that side: it's big again)
+    if (mini.side && showing(mini.side)) closeMini(); // back on that side: restore
     if ((was === "fluxer" || was === "discord") && !showing(was) && live[was] && on()) showMini(was);
     button();
   }).observe(body, { attributes: true, attributeFilter: ["data-mode"] });
 
-  // a button in the top bar brings a stream back after you closed its small window
+  // top bar button to bring back a closed stream
   function hiddenStream() { if (mini.side) return null; for (const s of SIDES) if (live[s] && !showing(s)) return s; return null; }
   function button() {
     const bar = $("bar"); if (!bar) return;
@@ -183,7 +181,7 @@
     if (s) b.title = "Watch the " + name(s) + " stream in a small window";
   }
 
-  // App > a switch for it
+  // App toggle
   function option() {
     const flip = $("opt-flip"), card = flip && flip.closest(".card");
     if (!card || $("opt-stream")) return;

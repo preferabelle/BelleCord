@@ -1,27 +1,20 @@
-// Performance, on the dashboard: what BelleCord is using right now (each part: Fluxer, Discord, the app itself, the
-// graphics card), one-click presets, and the switches behind them:
-//   * pause the side you're not looking at (its animations, GIFs and videos stop while it's out of sight; messages
-//     and notifications still come in)
-//   * still sites (moving backgrounds and animations on Fluxer and Discord stop)
-//   * no wallpaper blur (blur is the heaviest thing a theme does)
-//   * star effects (effects.js)
-//   * spellcheck
-//   * use the graphics card (needs a restart)
-//   * clean up (the sites' saved copies of pictures and files; you stay signed in) and refresh the hidden side
-// Every switch works the moment it's clicked (only the graphics card waits for a restart, and says so). It also
-// shows the top apps on your whole computer and how full its memory is.
-// The usage numbers are only read while the section is on screen.
+// Performance section: usage per process (fluxer, discord, app, gpu), presets, and toggles:
+// - pause hidden side
+// - still sites (no animated backgrounds)
+// - no wallpaper blur
+// - star effects
+// - spellcheck
+// - gpu acceleration (restart)
+// - clear cache / reload hidden side
+// also top system processes + memory. only polls while the section is visible.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const host = window.bcApp || {};
-  const P = (k, d) => { try { const v = window.bcPref ? window.bcPref(k) : undefined; return v === undefined ? d : v; } catch { return d; } };
-  const save = (c) => { try { window.bcSavePref && window.bcSavePref(c); } catch {} };
-  const toast = (t, ms) => { try { window.bcToast && window.bcToast(t, ms); } catch {} };
+  const { pref: P, savePref: save, toast, esc } = window.bcUtil;
   const body = document.body;
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // ---------------- the switches ----------------
+  // toggles
   const OPTS = [
     { k: "pauseHidden", d: true, name: "Pause the side you're not looking at", note: "Its animations, GIFs and videos stop while it's out of sight. Messages and notifications still come in." },
     { k: "stillSites", d: false, name: "Still Fluxer and Discord", note: "Moving theme backgrounds and the sites' own animations stop." },
@@ -47,11 +40,11 @@
     else save({ ["perf_" + k]: !!on });
     if (k === "noBlur") blur(on);
     apply();
-    // (pausing happens right away too, for a side that's already out of sight)
+    // pause right away if the side is already hidden
     if (k === "pauseHidden") for (const side of ["fluxer", "discord"]) if (!seen(side)) run(side, on ? PAUSE : UNPAUSE);
     if (!quiet) said(k, on);
   }
-  // a little "done" next to the switches, so it's clear it already happened
+  // inline 'done' feedback
   let gpuWas = null;
   function said(k, on) {
     const m = $("pf-msg");
@@ -67,7 +60,7 @@
     m.textContent = "✓ " + (o ? o.name : k) + (on ? " is on now." : " is off now.");
     clearTimeout(said.t); said.t = setTimeout(() => { if (m.textContent.startsWith("✓")) m.textContent = ""; }, 4000);
   }
-  // no blur: the wallpaper's blur goes to 0 (and back to what it was)
+  // no blur: wallpaper blur to 0, restore previous value
   function blur(off) {
     const inp = $("w-blur");
     if (!inp) return;
@@ -76,11 +69,10 @@
     inp.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
-  // ---------------- what they do on the sites ----------------
+  // injected css/js for the sites
   const PAUSE = "(function(){var s=document.getElementById('bc-pause');if(!s){s=document.createElement('style');s.id='bc-pause';s.textContent='*,*::before,*::after{animation-play-state:paused!important}';(document.head||document.documentElement).appendChild(s);}document.querySelectorAll('video').forEach(function(v){if(!v.paused&&!v.closest('[class*=\"voice\"],[class*=\"stream\"],[class*=\"call\"]')){v.dataset.bcPaused='1';try{v.pause()}catch(e){}}});return 1})()";
   const UNPAUSE = "(function(){var s=document.getElementById('bc-pause');if(s)s.remove();document.querySelectorAll('video[data-bc-paused]').forEach(function(v){delete v.dataset.bcPaused;try{v.play()}catch(e){}});return 1})()";
-  // (animations are made instant, not removed: Fluxer and Discord wait for a menu's or a popup's animation to finish
-  // before it works, so with them removed outright, lots of buttons stopped doing anything)
+  // ~0 duration rather than none: both sites wait on animationend before menus/popups work
   const STILL_CSS = "*,*::before,*::after{animation-duration:1ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}";
   const STILL = "(function(){var s=document.getElementById('bc-still');if(!s){s=document.createElement('style');s.id='bc-still';(document.head||document.documentElement).appendChild(s);}s.textContent=" + JSON.stringify(STILL_CSS) + ";return 1})()";
   const UNSTILL = "(function(){var s=document.getElementById('bc-still');if(s)s.remove();return 1})()";
@@ -91,7 +83,7 @@
     body.classList.toggle("perf-still", opt("stillSites"));
     for (const side of ["fluxer", "discord"]) {
       run(side, opt("stillSites") ? STILL : UNSTILL);
-      // (a short wait first, so flicking between sides doesn't stop and start everything)
+      // debounce so quick switching doesn't thrash
       if (seen(side)) { hiddenSince[side] = 0; run(side, UNPAUSE); }
       else if (!hiddenSince[side]) hiddenSince[side] = Date.now();
     }
@@ -105,9 +97,9 @@
   }, 2000);
   new MutationObserver(apply).observe(body, { attributes: true, attributeFilter: ["data-mode"] });
   for (const side of ["fluxer", "discord"]) { const w = $("wv-" + side); if (w) w.addEventListener("dom-ready", () => setTimeout(apply, 500)); }
-  window.bcPerf = { opt, apply }; // (effects.js asks about star effects)
+  window.bcPerf = { opt, apply }; // used by effects.js
 
-  // ---------------- the dashboard section ----------------
+  // dashboard section
   const css = document.createElement("style");
   css.textContent = [
     "#s-perf .usage{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px 12px;align-items:center;font-size:13px}",
@@ -158,7 +150,7 @@
     }));
   }
 
-  // what it's using (only while you can see it)
+  // usage (only polled while visible)
   const LABEL = { fluxer: "Fluxer", discord: "Discord", app: "BelleCord itself", gpu: "Graphics", links: "Quick links" };
   const visible = () => { if (body.dataset.mode !== "dash") return false; const r = sec.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
   async function usage() {
@@ -174,7 +166,7 @@
   }
   setInterval(usage, 3000);
 
-  // the top apps on your whole computer (by memory), and how full its memory is
+  // top processes + memory
   const mb = (v) => (v >= 1024 ? (v / 1024).toFixed(1) + " GB" : Math.round(v) + " MB");
   const isMe = (n) => /^(bellecord|electron)$/i.test(n);
   async function top() {
@@ -202,6 +194,6 @@
     $("pf-msg").textContent = "Refreshed " + sides.map((s) => (s === "fluxer" ? "Fluxer" : "Discord")).join(" and ") + ".";
   };
 
-  // start once the settings are read
+  // init after prefs
   const wait = setInterval(() => { if (!window.bcPref || !window.bcPrefsReady) return; clearInterval(wait); drawOpts(); apply(); }, 200);
 })();

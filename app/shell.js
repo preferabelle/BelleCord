@@ -1,32 +1,32 @@
-// The app's own page: sides, the server lists' top buttons, the dashboard (inbox, jump in, who's around, today,
-// countdowns, skin studio, theme studio, quick links), and putting the theme on both sites.
+// shell page: sides, rail header buttons, dashboard (inbox, jump in, online, today, countdowns, skin studio,
+// theme studio, quick links), and theme injection into both sites.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const host = window.bcApp || { hub: async () => ({ ok: false, error: "offline" }), getPrefs: async () => ({}), setPrefs: async (c) => c, getImg: async () => null, setImg: async () => true, notify: async () => {}, openExternal: async () => {}, setTitleBar: async () => {}, onSwitch: () => {}, onNotice: () => {} };
   const T = window.bcThemes, R = window.bcRail;
-  try { const kf = document.createElement("style"); kf.textContent = T.KEYFRAMES || ""; document.head.appendChild(kf); } catch {} // (moving backgrounds in the previews)
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  try { const kf = document.createElement("style"); kf.textContent = T.KEYFRAMES || ""; document.head.appendChild(kf); } catch {} // keyframes for animated preview backgrounds
+  const { esc } = window.bcUtil;
   const SIDES = ["fluxer", "discord"];
   const sideName = (s) => (s === "fluxer" ? "Fluxer" : "Discord");
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-  // ---------------- settings ----------------
+  // settings
   let prefs = {};
   const DEF = {
     mode: "fluxer", side: "fluxer", rail: "cols", split: 50, theme: { ...T.DEFAULT_STACK }, keepColors: false, myThemes: [],
     skins: [{ id: "me", name: "Me", color: "" }], wearF: "me", wearD: "me", wStr: 30, wBlur: 2,
     countdowns: [], links: [], inbox: [], today: null, todaySeen: [], voiceSeen: {}, pinNoteSeen: false,
     me: {}, myName: "", pilotName: "", myBadges: {}, hubKey: "", badgesDirty: false, badgeCache: {},
-    motion: null, // (Off, Smooth or Ultra; until you pick, Smooth, or Off when your computer asks for less motion)
+    motion: null, // off/smooth/ultra; default smooth, or off with prefers-reduced-motion
   };
   const P = (k) => (prefs[k] === undefined ? DEF[k] : prefs[k]);
   async function save(changes) { Object.assign(prefs, changes); try { prefs = Object.assign(await host.setPrefs(changes), prefs); } catch {} }
-  const later = {}; // busy things (inbox, today, voice) are saved at most every few seconds
+  const later = {}; // throttled save for inbox/today/voice
   function saveSoon(key) { clearTimeout(later[key]); later[key] = setTimeout(() => save({ [key]: prefs[key] }), 4000); }
   function toast(t, ms) { const e = $("toast"); e.textContent = t; e.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove("on"), ms || 3200); }
 
-  // pictures (skin pictures, wallpapers, banners) live in their own files
+  // images stored separately (skins, wallpapers, banners)
   const imgs = new Map();
   async function img(key) { if (imgs.has(key)) return imgs.get(key); let d = null; try { d = await host.getImg(key); } catch {} imgs.set(key, d || null); return d || null; }
   async function setImg(key, data) { imgs.set(key, data || null); try { await host.setImg(key, data || null); } catch {} }
@@ -36,7 +36,7 @@
       f.onchange = async () => {
         const file = f.files && f.files[0]; f.value = "";
         if (!file) return resolve(null);
-        if (file.type === "image/gif") { // a GIF stays a GIF, so it keeps moving
+        if (file.type === "image/gif") { // keep GIFs as GIFs so they animate
           if (file.size > 15 * 1024 * 1024) { toast("That GIF is over 15 MB. Pick a smaller one."); return resolve(null); }
           const rd = new FileReader(); rd.onload = () => resolve(String(rd.result)); rd.onerror = () => resolve(null); rd.readAsDataURL(file); return;
         }
@@ -52,20 +52,20 @@
     });
   }
 
-  // ---------------- sides ----------------
+  // sides
   const MODES = ["fluxer", "discord", "both", "dash"];
   let dmMode = false;
   const curSide = () => document.body.dataset.side || "fluxer";
   function setMode(m, quiet) {
     if (!MODES.includes(m)) m = "fluxer";
-    const only = P("only"); // (using just one side: the other one, and "both", aren't places to go)
+    const only = P("only"); // single-site mode: other side and 'both' aren't valid
     if ((only === "fluxer" || only === "discord") && m !== "dash" && m !== only) m = only;
     const was = document.body.dataset.mode;
     if (window.bcMotion) window.bcMotion.beforeMode(was, m);
     document.body.dataset.mode = m;
     if (m === "fluxer" || m === "discord") {
       document.body.dataset.side = m;
-      if (dmMode) R.act(m, "dm").then(() => setTimeout(() => R.read(m), 300)); // on the DM page: switching sides opens that side's DMs
+      if (dmMode) R.act(m, "dm").then(() => setTimeout(() => R.read(m), 300)); // on DMs: switching opens the other side's DMs
       const wv = $("wv-" + m); setTimeout(() => { try { wv.focus(); } catch {} }, 0);
     }
     if (!quiet) save({ mode: m, side: curSide() });
@@ -74,17 +74,17 @@
     if (window.bcMotion && was !== m) window.bcMotion.afterMode(m);
   }
   window.bcSetMode = setMode;
-  window.bcPref = (k) => P(k); // (for only.js)
+  window.bcPref = (k) => P(k); // for only.js
   window.bcSavePref = (c) => save(c);
   window.bcToast = (t, ms) => toast(t, ms);
   window.bcPickSide = (x) => pickSide(x);
-  // a click on a server (or the DM button) in the double list
+  // rail click (server or DM button)
   window.bcOnServer = (side, kind) => {
-    if (kind === "f") return; // (a folder just opens or closes in the list)
+    if (kind === "f") return; // folder: toggle only
     dmMode = kind === "dm";
     if (document.body.dataset.mode !== "both") { const was = dmMode; dmMode = false; setMode(side); dmMode = was; }
   };
-  // on the dashboard, the Fluxer / Discord tabs pick the side but you stay on the dashboard
+  // dashboard: side tabs change the side without leaving the dashboard
   function pickSide(s) { const only = P("only"); if (only === "fluxer" || only === "discord") s = only; document.body.dataset.side = s; save({ side: s }); paintShell(); paintRailTop(); paintDash(true); }
   const tab = (s) => (document.body.dataset.mode === "dash" ? pickSide(s) : setMode(s));
   document.querySelectorAll("#tabs [data-mode]").forEach((b) => (b.onclick = () => tab(b.dataset.mode)));
@@ -100,14 +100,14 @@
   document.body.classList.add(MAC ? "mac" : (window.bcApp && window.bcApp.platform) === "linux" ? "linux" : "win");
   if (MAC) document.querySelectorAll("[title*='Ctrl+']").forEach((el) => (el.title = el.title.replace(/Ctrl\+/g, "⌘")));
   addEventListener("keydown", (e) => { if ((MAC ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); keyMode(Number(e.key)); } if (e.key === "Escape") { $("addmenu").hidden = true; $("gcard").hidden = true; } });
-  function keyMode(n) { setMode(MODES[n - 1]); } // (Ctrl+1 to Ctrl+4 go straight there)
+  function keyMode(n) { setMode(MODES[n - 1]); } // ctrl+1..4
   host.onSwitch((n) => keyMode(n));
   document.querySelectorAll(".layoutsw [data-rail]").forEach((b) => (b.onclick = () => { document.body.dataset.rail = b.dataset.rail; save({ rail: b.dataset.rail }); }));
   $("r-add").onclick = (e) => { e.stopPropagation(); $("addmenu").hidden = !$("addmenu").hidden; };
   document.querySelectorAll("#addmenu [data-add]").forEach((b) => (b.onclick = async () => { $("addmenu").hidden = true; const s = b.dataset.add; setMode(s); await new Promise((r) => setTimeout(r, 150)); const ok = await R.act(s, "add"); if (!ok) toast("Couldn't find " + sideName(s) + "'s add button yet. Is " + sideName(s) + " signed in?"); }));
   addEventListener("click", (e) => { if (!e.target.closest("#addmenu,#r-add")) $("addmenu").hidden = true; });
 
-  // side by side: drag the line between them
+  // split view divider
   const div = $("divider");
   div.addEventListener("pointerdown", (e) => {
     e.preventDefault(); div.setPointerCapture(e.pointerId); div.classList.add("on"); document.body.classList.add("dragging");
@@ -117,15 +117,15 @@
     div.addEventListener("pointermove", move); div.addEventListener("pointerup", up, { once: true }); div.addEventListener("pointercancel", up, { once: true });
   });
 
-  // ---------------- each site: unread number, connection dot, a screen when it can't load ----------------
+  // per site: unread count, connection dot, error screen
   const ready = { fluxer: false, discord: false };
   for (const name of SIDES) {
     const wv = $("wv-" + name), pane = $(name), fail = pane.querySelector(".fail"), badge = $("b-" + name), net = $("n-" + name);
     wv.addEventListener("page-title-updated", (e) => { const m = String(e.title || "").match(/^\((\d+\+?)\)/); badge.classList.toggle("on", !!m); badge.textContent = m ? m[1] : ""; });
-    const fxfix = fail.querySelector(".fxfix"); // (the Fluxer side's "Fix Fluxer" button)
+    const fxfix = fail.querySelector(".fxfix"); // Fix Fluxer button on the error screen
     wv.addEventListener("did-fail-load", (e) => {
       if (!e.isMainFrame || e.errorCode === -3) return;
-      const dns = /NAME_NOT_RESOLVED/i.test(e.errorDescription); // the computer's DNS can't find the address
+      const dns = /NAME_NOT_RESOLVED/i.test(e.errorDescription); // ERR_NAME_NOT_RESOLVED
       const offline = /INTERNET|NETWORK/i.test(e.errorDescription);
       const canFix = !!(fxfix && host.fixFluxer);
       fail.querySelector(".why").textContent = offline ? "Your internet looks off. When it's back, try again." : (dns ? sideName(name) + "'s address couldn't be found from this computer." : sideName(name) + " didn't answer (" + e.errorDescription + ").") + (canFix ? " \"Fix Fluxer\" finds out why, and fixes what it can." : dns ? " This is usually your computer's DNS." : " It may be having trouble; try again in a bit.");
@@ -134,7 +134,7 @@
     });
     if (fxfix) fxfix.onclick = () => goToFixFluxer();
     wv.addEventListener("did-finish-load", () => { fail.hidden = true; net.className = "net"; net.title = "Connected"; });
-    // a fresh page: the look goes on again (after anything still on its way, which is taken off first)
+    // on navigation: drop stale css, re-inject
     const fresh = async () => { for (const k of [themeKeys[name], fontKeys[name]]) if (k) { try { await wv.removeInsertedCSS(k); } catch {} } themeKeys[name] = null; fontKeys[name] = null; lastCss[name] = ""; lastFont[name] = ""; };
     wv.addEventListener("dom-ready", () => { ready[name] = true; chains[name] = chains[name].then(fresh, fresh); if (name === "fluxer") readFluxerColors(); applySide(name); });
     fail.querySelector(".retry").onclick = () => { fail.hidden = true; try { wv.reload(); } catch {} };
@@ -142,12 +142,12 @@
   addEventListener("offline", () => { for (const n of SIDES) { $("n-" + n).className = "net down"; $("n-" + n).title = "Your internet is off"; } });
   addEventListener("online", () => { for (const n of SIDES) { $("n-" + n).className = "net"; $("n-" + n).title = "Connected"; } });
 
-  // ---------------- skins (each side wears one) ----------------
+  // skins (one per side)
   const skins = () => (P("skins") && P("skins").length ? P("skins") : DEF.skins);
   const skinOf = (side) => skins().find((s) => s.id === P(side === "fluxer" ? "wearF" : "wearD")) || skins()[0];
   const okColor = (c) => (/^#[0-9a-f]{6}$/i.test(String(c || "")) ? c : null);
 
-  // ---------------- the theme, on both sites and on this app ----------------
+  // theme injection (sites + shell)
   let fxColors = null;
   const themeKeys = { fluxer: null, discord: null }, fontKeys = { fluxer: null, discord: null }, lastCss = { fluxer: "", discord: "" }, lastFont = { fluxer: "", discord: "" };
   const chains = { fluxer: Promise.resolve(), discord: Promise.resolve() };
@@ -162,7 +162,7 @@
     try { c = await v.executeJavaScript(T.READ_FLUXER_COLORS); } catch { return; }
     if (!c || !c.chat) return;
     if (JSON.stringify(c) === JSON.stringify(fxColors)) return;
-    fxColors = c; save({ fxColors: c }); // (kept, so Discord has your Fluxer look right away next time, even if Fluxer is down)
+    fxColors = c; save({ fxColors: c }); // cached so discord gets the fluxer palette immediately next launch
     applySide("discord"); paintShell(); paintStudio();
   }
   setInterval(readFluxerColors, 20000);
@@ -174,7 +174,7 @@
     const css = side === "fluxer" ? T.fluxerCss(stack, x) : T.discordCss(stack, x);
     if (side === "fluxer") { try { await v.executeJavaScript("document.documentElement.setAttribute('data-bc-theme','');1"); } catch {} }
     if (css !== lastCss[side]) {
-      let k = null; try { k = await v.insertCSS(css); } catch {} // the new look goes on before the old comes off: no flash
+      let k = null; try { k = await v.insertCSS(css); } catch {} // insert the new style before removing the old one (no flash)
       if (themeKeys[side]) { try { await v.removeInsertedCSS(themeKeys[side]); } catch {} }
       themeKeys[side] = k; lastCss[side] = css;
     }
@@ -186,7 +186,7 @@
     }
   }
   function applyAll() { for (const s of SIDES) applySide(s); paintShell(); }
-  // fonts: fetched once from Google Fonts and handed to the sites inside the style (their rules allow that)
+  // fonts: fetched once from google fonts and inlined into the injected css
   const fontMem = {};
   async function fontCss(key) {
     const F = T.FONTS[key];
@@ -204,10 +204,10 @@
       }
       fontMem[key] = out || null;
       try { if (out) localStorage.setItem("bcfont:" + key, out); } catch {}
-    } catch { return null; } // (offline: the site keeps its own font; tried again next time)
+    } catch { return null; } // offline: keep the site's font, retry next launch
     return fontMem[key];
   }
-  // this app follows the theme too (and the skin color of the side you're on)
+  // shell follows the theme (+ current side's skin color)
   async function paintShell() {
     const side = curSide(), stack = P("theme");
     const v = T.shellVars(stack, { fluxer: fxColors, accent: okColor(skinOf(side).color) });
@@ -221,18 +221,18 @@
     if (tb[0] && tb[1] && tb.join() !== paintShell.tb && host.setTitleBar) { paintShell.tb = tb.join(); host.setTitleBar(tb[0], tb[1]).catch(() => {}); }
     const f = await fontCss(stack.font);
     if ($("shellfont").textContent !== (f || "")) $("shellfont").textContent = f || "";
-    // (the theme's cursor, here in the app too)
+    // theme cursor in the shell too
     let sc = $("shellcursor"); if (!sc) { sc = document.createElement("style"); sc.id = "shellcursor"; document.head.appendChild(sc); }
     const cc = T.cursorCss ? T.cursorCss(stack, T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(side).color) }), "html") : "";
     if (sc.textContent !== cc) sc.textContent = cc;
     paintRailTop();
   }
 
-  // any CSS color as #rrggbb (the window's own buttons want that)
+  // normalize to #rrggbb (titleBarOverlay needs hex)
   const hexCtx = document.createElement("canvas").getContext("2d");
   function hexOf(c) { try { hexCtx.fillStyle = "#000000"; hexCtx.fillStyle = String(c || ""); const v = hexCtx.fillStyle; return /^#[0-9a-f]{6}$/i.test(v) ? v : null; } catch { return null; } }
 
-  // ---------------- the top of the server list: your dashboard picture, one DM button ----------------
+  // rail header: dashboard avatar + DM button
   async function paintRailTop() {
     const sk = skinOf(curSide());
     const pic = sk.pic ? await img("skin-" + sk.id + "-pic") : null;
@@ -250,7 +250,7 @@
   $("r-dash").oncontextmenu = (e) => { e.preventDefault(); $("heropic").click(); };
   $("heropic").onclick = async () => { const sk = skinOf(curSide()); const d = await pickImage(512, 512); if (!d) return; await setImg("skin-" + sk.id + "-pic", d); updateSkin(sk.id, { pic: true }); toast("Picture changed"); };
 
-  // ---------------- what the sites tell us: inbox, voice, people, today ----------------
+  // data from the sites: inbox, voice, people, today
   const people = new Map(); // side:id -> {name, status, avatar, side, at}
   const seenMsg = new Set(P("todaySeen") || []);
   const snowTime = (id) => { try { return Number((BigInt(id) >> 22n) + 1420070400000n); } catch { return 0; } };
@@ -260,7 +260,7 @@
     let inboxChanged = false, todayChanged = false, voiceChanged = false;
     const inbox = P("inbox").slice();
     const has = (k) => inbox.some((x) => x.key === k);
-    for (const n of e.detail.notes || []) { // a notification from that site
+    for (const n of e.detail.notes || []) { // site notification
       const key = side + ":n:" + (n.url || n.title + n.body + n.at);
       if (has(key)) continue;
       inbox.unshift({ key, side, kind: "note", nkey: n.key, title: n.title, body: n.body, icon: n.icon || "", url: n.url || "", path: n.path || "", at: n.at || now });
@@ -268,15 +268,15 @@
     }
     for (const m of st.msgs || []) {
       const t = snowTime(m.id);
-      if (m.mention && !m.self && now - t < 864e5) { // a message that mentions you or replies to you
+      if (m.mention && !m.self && now - t < 864e5) { // mention or reply
         const key = side + ":m:" + m.id;
         if (!has(key)) { inbox.unshift({ key, side, kind: "mention", title: m.author, body: m.text, icon: m.avatar || "", path: "/channels/" + m.g + "/" + m.ch + "/" + m.id, at: t, where: st.channel ? "#" + st.channel : "" }); inboxChanged = true; }
       }
-      const sk = side + ":" + m.id; // today's numbers
+      const sk = side + ":" + m.id; // today stats
       if (seenMsg.has(sk) || dayKey(t) !== dayKey(now)) continue;
       seenMsg.add(sk); todayChanged = true;
       let td = P("today"); if (!td || td.date !== dayKey(now)) { td = { date: dayKey(now), ch: {}, ppl: {} }; seenMsg.clear(); seenMsg.add(sk); }
-      const other = m.g === "@me" ? ((st.msgs || []).find((x) => x.ch === m.ch && !x.self && x.author) || {}).author : null; // (a DM is named after the other person)
+      const other = m.g === "@me" ? ((st.msgs || []).find((x) => x.ch === m.ch && !x.self && x.author) || {}).author : null; // DM channel named after the recipient
       const ck = side + ":" + m.g + ":" + m.ch, chName = other ? "DM with " + other : st.channel ? (side === "discord" && /^@/.test(st.channel) ? st.channel : "#" + st.channel) : m.g === "@me" ? "a DM" : "a channel";
       td.ch[ck] = { n: ((td.ch[ck] && td.ch[ck].n) || 0) + 1, name: (td.ch[ck] && !/^a (channel|DM)$/.test(td.ch[ck].name) && td.ch[ck].name) || chName, guild: (td.ch[ck] && td.ch[ck].guild) || (m.g === "@me" ? "" : (st.guild && st.guild.name) || ""), side };
       const pk = side + ":" + (m.aid || m.author);
@@ -284,7 +284,7 @@
       prefs.today = td;
     }
     for (const p of st.people || []) people.set(side + ":" + p.id, { ...p, side, at: now });
-    if (st.me && st.me.id && (P("me")[side] || {}).id !== st.me.id) { // who you are on that side (for your badges and the intro)
+    if (st.me && st.me.id && (P("me")[side] || {}).id !== st.me.id) { // own account per side (badges, intro)
       const me = { ...P("me"), [side]: st.me }; const ch = { me }; if (st.me.name && (side === "fluxer" || !P("myName"))) ch.myName = st.me.name; save(ch);
       if (P("badgesDirty")) sendBadges(true);
     }
@@ -298,14 +298,14 @@
     if (document.body.dataset.mode === "dash") paintDash();
   });
 
-  // ---------------- dashboard ----------------
+  // dashboard
   const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
   const setHtml = (el, html) => { if (el.__h !== html) { el.__h = html; el.innerHTML = html; return true; } return false; };
   const av = (src, name) => (src ? '<img src="' + esc(src) + '" alt="">' : '<span class="av">' + esc(String(name || "?").slice(0, 2)) + "</span>");
   function paintDash(force) {
     if (document.body.dataset.mode !== "dash" && !force) return;
     tick();
-    // unread mentions per server, both sides
+    // unread mentions per guild
     const w = R.waiting();
     if (setHtml($("waiting"), w.slice(0, 14).map((x) => '<button class="chip" data-side="' + x.side + '" data-g="' + esc(x.id) + '">' + av(x.icon, x.ini || x.name) + esc(x.name) + ' <span class="tag ' + x.side + '">' + sideName(x.side) + '</span><span class="n">' + x.m + "</span></button>").join("")))
       $("waiting").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => R.press(b.dataset.side, "g", b.dataset.g)));
@@ -319,7 +319,7 @@
       $("jump").querySelectorAll(".vcard").forEach((b) => (b.onclick = async () => { const ok = await R.joinVoice(b.dataset.side, b.dataset.g, b.dataset.c); if (!ok) toast("Open that server once so its voice channels are on the page, then try again."); }));
     // who's around
     const cut = Date.now() - 15 * 60000, RANK = { online: 0, idle: 1, dnd: 2 }, byName = new Map();
-    for (const p of people.values()) { // the same name on both sides is one person here (that's what bridging is for)
+    for (const p of people.values()) { // same name on both sides = one person (bridged)
       if (p.at <= cut || !p.name) continue;
       const k = String(p.name).toLowerCase(), o = byName.get(k) || { name: p.name, avatar: p.avatar, status: p.status, sides: new Set() };
       o.sides.add(p.side); if ((RANK[p.status] ?? 3) < (RANK[o.status] ?? 3)) o.status = p.status; if (!o.avatar && p.avatar) o.avatar = p.avatar;
@@ -350,7 +350,7 @@
   }
   $("inbox-clear").onclick = () => { prefs.inbox = []; save({ inbox: [] }); paintDash(true); };
 
-  // ---------------- countdowns (Christmas is always there; yours take turns in the title bar) ----------------
+  // countdowns (christmas built in; custom ones rotate in the title bar)
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   function nextDate(dateStr, yearly) {
     const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -405,7 +405,7 @@
     };
   })();
 
-  // ---------------- skin studio ----------------
+  // skin studio
   function updateSkin(id, changes) {
     const list = skins().map((s) => (s.id === id ? { ...s, ...changes } : s));
     save({ skins: list }); paintSkins(); applyAll();
@@ -440,7 +440,7 @@
   $("w-str").oninput = (e) => { prefs.wStr = Number(e.target.value); clearTimeout(later.ws); later.ws = setTimeout(() => { save({ wStr: prefs.wStr }); applyAll(); }, 200); };
   $("w-blur").oninput = (e) => { prefs.wBlur = Number(e.target.value); clearTimeout(later.wb); later.wb = setTimeout(() => { save({ wBlur: prefs.wBlur }); applyAll(); }, 200); };
 
-  // ---------------- theme studio ----------------
+  // theme studio
   const sameStack = (a, b) => ["palette", "background", "corners", "font", "size", "spacing"].every((k) => (a[k] || "") === (b[k] || "")) && (a.cursor || "site") === (b.cursor || "site") && [...(a.effects || [])].sort().join() === [...(b.effects || [])].sort().join();
   function preview(pieces) {
     const t = T.tokens(pieces, { fluxer: fxColors }), r = (T.CORNERS[pieces.corners] || {}).r ?? 8, F = T.FONTS[pieces.font];
@@ -466,14 +466,13 @@
     await save({ theme: next });
     applyAll(); paintStudio();
   }
-  // ---- the mini app: how a theme looks before (and after) you pick it ----
+  // mini preview
   let miniWall = null;
-  let themeQuery = ""; // what's typed in the theme search box
-  let tplGroup = "all"; // which group of pre-made themes is showing
-  let pieceTab = null, colorGroup = "all"; // which tab of the theme pieces is open, and which colors are showing
-  const shownFonts = new Set(); // (fonts loaded for the Font tab's tiles)
-  // the preview: a little copy of the app wearing the theme, before (and after) you put it on. It shows the
-  // background (moving ones move), colors, font, corners, size, spacing, the cursor (hover it) and every effect.
+  let themeQuery = ""; // search query
+  let tplGroup = "all"; // template group
+  let pieceTab = null, colorGroup = "all"; // piece tab + palette filter
+  const shownFonts = new Set(); // fonts loaded for the Font tab tiles
+  // live preview of the current/hovered theme: background, colors, font, radius, size, spacing, cursor, effects
   function mini(stack) {
     const t = T.tokens(stack, { fluxer: fxColors, accent: okColor(skinOf(curSide()).color) });
     const r = (T.CORNERS[stack.corners] || {}).r ?? 8, F = T.FONTS[stack.font], fx = new Set(stack.effects || []);
@@ -494,7 +493,7 @@
       '</div><div class="mbox">Message #general<span>😊 🎁</span></div></div>' +
       '<div class="mmem"><p>ONLINE — 4</p><p><i style="background:#5aa469"></i>Alex</p><p><i style="background:#4a6cd4"></i>Sam</p><p><i style="background:#c75b9b"></i>Riley</p><p><i style="background:#e8a0c8"></i>You</p></div>' + (ov ? '<div class="mov" style="' + esc(ov) + '"></div>' : "") + "</div>";
   }
-  // a pre-made theme's card: the whole mini app in that theme, shrunk down, with its cursor in the corner
+  // template card: scaled-down preview + cursor
   function bigPreview(pieces) {
     const st = { ...T.DEFAULT_STACK, ...pieces }, c = T.CURSORS && T.CURSORS[st.cursor], u = c && c.url ? c.url(T.tokens(st, { fluxer: fxColors })) : null, img = u ? (u.match(/^url\("([^"]+)"\)/) || [])[1] : null;
     return '<div class="tpv"><div class="tpz">' + mini(st) + "</div>" + (img ? '<img class="tpc" src="' + esc(img) + '" alt="">' : "") + "</div>";
@@ -513,7 +512,7 @@
     const mine = (P("myThemes") || []).map((m) => ({ id: "my:" + m.id, name: m.name, blurb: "Yours", pieces: m.pieces, mine: m.id, group: "mine" }));
     const all = [...mine, ...T.TEMPLATES];
     const q = (themeQuery || "").trim().toLowerCase();
-    // (the groups along the top: All, Yours, Classic, Games, Anime, Soulbound, Moods)
+    // group tabs
     const groups = (T.TEMPLATE_GROUPS || []).filter(([g]) => g === "all" || all.some((tp) => (tp.group || "classic") === g));
     if (!groups.some(([g]) => g === tplGroup)) tplGroup = "all";
     if ($("tpl-groups")) {
@@ -530,12 +529,11 @@
       const del = e.target.closest("[data-del]");
       if (del) { e.stopPropagation(); await save({ myThemes: P("myThemes").filter((m) => m.id !== del.dataset.del) }); paintStudio(); return; }
       const tp = all[Number(b.dataset.i)], pieces = { ...tp.pieces, effects: [...(tp.pieces.effects || [])] };
-      if (P("keepColors") && !tp.mine) delete pieces.palette; // your colors stay; the rest of the template goes on top
+      if (P("keepColors") && !tp.mine) delete pieces.palette; // keep user colors, apply the rest of the template
       await setTheme(pieces);
       toast(tp.name);
     }));
-    // the pieces, in tabs (Colors, Background, Font, Cursor, Effects, Layout): each a grid of tiles you can see before
-    // you pick. Hover anything to try it in the preview, click to keep it.
+    // piece tabs (colors, background, font, cursor, effects, layout); hover previews, click applies
     const t0 = T.tokens(stack, { fluxer: fxColors });
     const BG_ICON = { flamecheck: "🔥", thunderscales: "⚡", reiatsu: "💢", nixie: "🔢", wall: "🏰", aura: "💚", madmoon: "🌕", notebook: "📓", chainsaw: "🪚", elementorbs: "🌀", cleave: "🗡", hollowpurple: "🟣", none: "🚫", wallpaper: "🖼", stars: "⭐", petals: "🌸", leaves: "🍃", waves: "🌊", grid: "🌆", dots: "🎊", embers: "🔥", damask: "⚜️", aurora: "🌌", bokeh: "🫧", honeycomb: "🐝", rain: "🌧", mesh: "🎨", osucircles: "🎯", osutriangles: "🔺", checker: "🏁", nebula: "🌠", snow: "❄️", fireflies: "✨", magic: "🔮", moon: "🌙", circuit: "🔌", crystals: "💎", wisps: "👻", gold: "🪙", abyssrings: "🕳", pixels: "👾", streaks: "⚡", void: "⚫", sparks: "🔨", bricks: "🧱", roots: "🌱", marks: "🩸", sun: "🌅", hearts: "💗", seigaiha: "🌊", uroko: "⚡", butterflies: "🦋", wisteria: "💜", hinokami: "☀️", domain: "🌀", blackflash: "⚡", cursedflames: "🔥", getsuga: "🌙", reishi: "💫", ripples: "💧", gleam: "⚔️" };
 
@@ -552,7 +550,7 @@
         return tile('data-cat="palette" data-k="' + k + '"', stack.palette === k, '<div class="pal" style="' + esc(v) + '"><div class="p"><u class="a"></u><u></u><u></u></div><div class="c"><s class="l"></s><s></s><s style="width:70%"></s><em></em></div></div>', p.own ? "Fluxer's own" : p.name, "");
       }).join("") + "</div>";
     } else if (pieceTab === "bg") {
-      // (a quick way to take your wallpaper off: the picture or GIF on the skin you're wearing on this side)
+      // remove wallpaper from the current side's skin
       const wearing = skinOf(curSide());
       pane = (wearing && wearing.wall ? '<div class="wallbar"><span>🖼 <b>' + esc(wearing.name || "Your skin") + '</b> has a wallpaper</span><button id="wall-off" title="Take the wallpaper picture or GIF off this skin">🗑 Remove wallpaper</button></div>' : "");
       pane += '<div class="ptiles" style="--tw:140px">' + Object.entries(T.BACKGROUNDS).map(([k, b]) => {
@@ -601,8 +599,8 @@
     toast("Surprise! Tweak it below, or hit Start over.");
   };
 
-  // ---------------- quick links: TikTok, Pinterest, X, and yours ----------------
-  const SFX = (window.bcApp && window.bcApp.profile && window.bcApp.profile.suffix) || ""; // (each person on this computer has their own sign-ins)
+  // quick links: tiktok, pinterest, x, custom
+  const SFX = (window.bcApp && window.bcApp.profile && window.bcApp.profile.suffix) || ""; // per-profile partitions
   const BUILTIN = [
     { id: "tiktok", name: "TikTok", letter: "T", url: "https://www.tiktok.com/", part: "persist:tiktok" + SFX },
     { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" + SFX },
@@ -637,14 +635,14 @@
   $("spx").onclick = closePanel;
   $("spout").onclick = () => { const l = allLinks().find((x) => x.id === openId); if (l) host.openExternal(l.url); };
   $("pinnote-x").onclick = () => { $("pinnote").hidden = true; save({ pinNoteSeen: true }); };
-  // Pinterest: Google's sign-in can't work inside an app. Say so, and how to sign in instead.
+  // pinterest: google sign-in can't work embedded, show alternatives
   host.onNotice((what) => {
     if (!/^pinterest-google/.test(what)) return;
-    if (what === "pinterest-google") { // you pressed "Continue with Google"
+    if (what === "pinterest-google") { // 'continue with google' clicked
       if (openId !== "pinterest") togglePanel("pinterest");
       $("pinnote").hidden = false; $("pinnote").classList.remove("flash"); void $("pinnote").offsetWidth; $("pinnote").classList.add("flash");
       toast("Google sign-in isn't possible here. Use the QR code, or sign in regularly on the sign-in page.", 6000);
-    } else if (openId === "pinterest" && !P("pinNoteSeen")) $("pinnote").hidden = false; // (its Google button was left out)
+    } else if (openId === "pinterest" && !P("pinNoteSeen")) $("pinnote").hidden = false; // google button hidden
   });
   $("ln-add").onclick = async () => {
     const name = $("ln-name").value.trim(); let url = $("ln-url").value.trim();
@@ -655,7 +653,7 @@
     $("ln-name").value = ""; $("ln-url").value = ""; drawLinks();
   };
 
-  // ---------------- the first time: your name (it goes on the intro, "PILOT · NAME") ----------------
+  // first run: name (used on the intro card)
   function askName() {
     if (P("pilotName")) return Promise.resolve();
     return new Promise((done) => {
@@ -667,13 +665,13 @@
     });
   }
 
-  // ---------------- the intro (mine, with your name) ----------------
+  // intro
   function intro() {
     const sp = $("bcsplash");
     if (!sp || sessionStorage.getItem("bcIntro")) return;
     try { sessionStorage.setItem("bcIntro", "1"); } catch {}
     $("bcswm").innerHTML = "BELLECORD".split("").map((c, i) => '<span style="animation-delay:' + (0.45 + i * 0.05).toFixed(2) + 's">' + c + "</span>").join("");
-    const pilot = String(P("pilotName") || "").toUpperCase(); // (the name you typed the first time, or in App)
+    const pilot = String(P("pilotName") || "").toUpperCase(); // saved name
     $("bcspilot").textContent = pilot ? "PILOT · " + pilot : "PILOT";
     sp.hidden = false;
     const n = $("bcsync"), t0 = performance.now() + 1250;
@@ -683,11 +681,11 @@
     sp.onclick = done; setTimeout(done, 3100);
   }
 
-  // ---------------- game badges ----------------
+  // game badges
   const G = window.bcGames;
   const hub = (method, route, payload) => (host.hub ? host.hub(method, route, payload).catch(() => ({ ok: false, error: "offline" })) : Promise.resolve({ ok: false, error: "offline" }));
-  // "I use BelleCord": my accounts go to the hub now and then, so I get the BelleCord Users role in the servers
-  // (and so do the bots that stand in for me on the other side)
+  // hello: post account ids to the hub every 6h so it can assign the BelleCord Users role
+  // (and to the bridged stand-in bots)
   let helloSent = "", helloAt = 0;
   function sayHello() {
     try {
@@ -701,9 +699,7 @@
   }
   setInterval(sayHello, 6 * 3600000);
   setTimeout(sayHello, 15000);
-  // "this copy is open": a quick check-in every 5 minutes, so I can see how many people have BelleCord and how many
-  // are on it right now. It sends a random number that's only this copy's, your two account numbers and which update
-  // you're on. Nothing else.
+  // heartbeat every 5 min for usage counts: random install id, the two account ids, update number
   function stillHere() {
     try {
       let id = P("installId");
@@ -720,9 +716,9 @@
   const asking = new Set(); let askTimer = null;
   const badgeList = (person) => {
     const out = person && person.games ? G.GAMES.filter((g) => person.games[g.key] && person.games[g.key].enabled !== false).map((g) => ({ key: g.key, glyph: g.glyph, color: g.color, name: g.name, svg: G.icon ? G.icon(g.key) : "" })) : [];
-    // (the BelleCord Pilot badge, for finishing the tutorial, goes first)
+    // pilot badge first
     if (person && person.pilot && G.PILOT) out.unshift({ key: "pilot", glyph: G.PILOT.glyph, color: G.PILOT.color, name: G.PILOT.name, svg: G.icon("pilot") });
-    // (and the Owner badge, mine only, before everything)
+    // owner badge before everything
     if (person && person.owner && G.OWNER) out.unshift({ key: "owner", glyph: G.OWNER.glyph, color: G.OWNER.color, name: G.OWNER.name, svg: G.icon("owner") });
     return out;
   };
@@ -740,11 +736,11 @@
     const out = {};
     for (const k of want) {
       if (r.ok && r.data && k in r.data) { rememberPerson(k, r.data[k]); out[k] = r.data[k]; }
-      else out[k] = people2.has(k) ? people2.get(k) : P("badgeCache")[k] || null; // (hub away: the last copy)
+      else out[k] = people2.has(k) ? people2.get(k) : P("badgeCache")[k] || null; // hub down: use cached
     }
     return out;
   }
-  // the pages ask for the badges of a profile you open; a badge you click opens its card here
+  // pages request badges for opened profiles; clicking a badge opens its card here
   async function answer(side, keys) {
     const got = await lookUp(keys), push = {};
     for (const k of keys) push[k] = badgeList(got[k]);
@@ -762,7 +758,7 @@
     }
   }
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("console-message", (e) => onPageMessage(s2, e.message));
-  // what goes into each page: badges next to the name on profiles (like the site's own badges)
+  // injected into each page: badges next to names on profiles
   const BADGE_PAGE = "(" + function (side) {
     if (window.__bcGB) return 1;
     window.__bcGB = 1;
@@ -814,15 +810,13 @@
     return 1;
   }.toString() + ")";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(BADGE_PAGE + "(" + JSON.stringify(s2) + ")").catch(() => {}); });
-  // no BOT / APP tags on the bridge: my bridged bots (the mirrors and twins that speak for my friends on the other
-  // side, my own bot, Asuka) are people, and every message posted through a webhook (how the bridge posts for
-  // everyone else) shows without a tag too. On both Fluxer and Discord.
+  // hide BOT/APP tags for the bridged bots (mirrors/twins, Asuka) and webhook messages, on both sites
   const NOBOT_PAGE = "(" + function (side, ids) {
     window.__bcBridged = new Set(ids);
     if (window.__bcNoBot) { if (window.__bcNoBotRedo) window.__bcNoBotRedo(); return 1; }
     window.__bcNoBot = 1;
     var css = document.createElement("style");
-    // (an attribute, not a class: the site redraws its own classes, but leaves attributes it doesn't know alone)
+    // attribute instead of class since the sites rewrite their class lists
     css.textContent = "[data-bcnb=hide]{display:none!important}" + (side === "fluxer"
       ? "[data-flx-author-webhook=true] [class*='ChannelUserTag.module__tag']:not([data-flx*='--op']),[data-flx-author-webhook=true] [data-flx$='user-tag-offset'],[data-flx-author-webhook=true] [data-flx$='user-tag-compact']{display:none!important}"
       : "");
@@ -837,7 +831,7 @@
       }
       return null;
     };
-    // Discord: the message (or person) a tag belongs to, from the page's own data
+    // discord: owning message/user from the page's own data
     var fiberKey = null;
     var reactInfo = function (el) {
       if (!fiberKey) { var ks = Object.keys(el); for (var i = 0; i < ks.length; i++) if (ks[i].indexOf("__reactFiber$") === 0) { fiberKey = ks[i]; break; } }
@@ -855,7 +849,7 @@
       var tags = document.querySelectorAll(TAGS);
       for (var i = 0; i < tags.length; i++) {
         var t = tags[i]; if (t.hasAttribute("data-bcnb")) continue;
-        if (/--op/.test(t.getAttribute("data-flx") || "") || /botTagOP/i.test(t.className) || (t.textContent || "").trim() === "OP") { t.setAttribute("data-bcnb", "keep"); continue; } // (OP is a forum tag, not a bot tag)
+        if (/--op/.test(t.getAttribute("data-flx") || "") || /botTagOP/i.test(t.className) || (t.textContent || "").trim() === "OP") { t.setAttribute("data-bcnb", "keep"); continue; } // OP is a forum tag
         if (side === "fluxer") {
           var art = t.closest("[data-flx-author-id]");
           if (art && art.getAttribute("data-flx-author-webhook") === "true") { t.setAttribute("data-bcnb", "hide"); continue; }
@@ -868,7 +862,7 @@
         }
       }
     };
-    // (when the list changes, everything is looked at again)
+    // rescan on list change
     window.__bcNoBotRedo = function () { var done = document.querySelectorAll("[data-bcnb]"); for (var i = 0; i < done.length; i++) done[i].removeAttribute("data-bcnb"); scan(); };
     setInterval(scan, 700); scan();
     return 1;
@@ -878,8 +872,8 @@
   const loadBridged = () => hub("GET", "/v1/bridged").then((r) => { if (r && r.ok && r.data && Array.isArray(r.data.ids)) { const changed = JSON.stringify(r.data.ids) !== JSON.stringify(bridged); bridged = r.data.ids; if (changed) sendBridged(); } });
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => sendBridged(s2));
   loadBridged(); setInterval(loadBridged, 10 * 60000);
-  // a video playing on either side: the page says so (data-bc-video on its root), and the theme's moving background
-  // and frosted glass hold still until it stops (see videoCalm in themes.js). A looping, silent GIF doesn't count.
+  // video playing on either side: page sets data-bc-video on root, animated background and glass pause until it
+  // stops (videoCalm in themes.js). muted looping GIFs don't count.
   const VIDEO_PAGE = "(" + function () {
     if (window.__bcVideo) return 1;
     window.__bcVideo = 1;
@@ -895,8 +889,7 @@
     return 1;
   }.toString() + ")()";
   for (const s2 of SIDES) $("wv-" + s2).addEventListener("dom-ready", () => { $("wv-" + s2).executeJavaScript(VIDEO_PAGE).catch(() => {}); });
-  // Fluxer: if you were at the bottom of a chat, you stay at the bottom when something changes size
-  // (a new message, a picture loading, the search panel opening) instead of the last message ending up under the box
+  // fluxer: keep the chat pinned to the bottom on resize (new message, image load, search panel)
   const STICK = "(" + function () {
     if (window.__bcStick) return 1;
     window.__bcStick = 1;
@@ -916,16 +909,16 @@
   }.toString() + ")()";
   $("wv-fluxer").addEventListener("dom-ready", () => { $("wv-fluxer").executeJavaScript(STICK).catch(() => {}); });
 
-  // ---- live stats: which games the badge hub can fill in from the real profile right now ----
-  let liveGames = null; // (until the hub answers: Overwatch and the chess sites, like before)
+  // live stats support from the hub
+  let liveGames = null; // default until the hub responds: overwatch + chess
   const OLD_LIVE = new Set(["overwatch", "chess", "lichess"]);
   const isLive = (game) => !!(game && game.live && (liveGames ? liveGames.has(game.live) : OLD_LIVE.has(game.live)));
-  const locked = (game, what) => isLive(game) && (game.lock || ["rank", "stats"]).includes(what); // (what live stats replace: nobody can type in a fake rank)
+  const locked = (game, what) => isLive(game) && (game.lock || ["rank", "stats"]).includes(what); // fields replaced by live stats
   async function loadLiveGames() { const r = await hub("GET", "/v1/live"); if (r.ok && r.data && Array.isArray(r.data.games)) liveGames = new Set(r.data.games); }
   loadLiveGames(); setInterval(loadLiveGames, 15 * 60000);
   const cap = (t) => { t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); };
 
-  // ---- the card you get when you click a badge ----
+  // badge card
   const cardEsc = esc;
   async function openCard(key, gameKey, liveFresh) {
     const person = key === "me" ? myPerson() : people2.has(key) ? people2.get(key) : P("badgeCache")[key];
@@ -959,7 +952,7 @@
     const mainTitle = main ? (/^Main /.test(game.mainLabel || "") ? "Mains " + main : main) : g.role;
     const mainSmall = [main && g.role ? g.role : "", most ? (L.mainNote ? L.mainNote.split(" · ")[0] : "Most played") + ": " + most : !g.main && L.mainNote ? L.mainNote : game.mainLabel && main ? game.mainLabel : ""].filter(Boolean).join(" · ");
     const sticker = g.showSticker !== false ? g.sticker || null : null;
-    const px = (u) => (/^data:image\/png/.test(u || "") ? " px" : ""); // (Minecraft pictures stay crisp pixels)
+    const px = (u) => (/^data:image\/png/.test(u || "") ? " px" : ""); // pixelated for minecraft
     const others = badgeList(person).filter((b) => b.key !== game.key);
     box.style.setProperty("--gc", accent);
     box.style.setProperty("--gcard", L.banner ? 'url("' + L.banner + '")' : "linear-gradient(135deg," + accent + ",#24262b)");
@@ -988,7 +981,7 @@
   $("gcard").addEventListener("click", (e) => { if (e.target === $("gcard")) $("gcard").hidden = true; });
   const isMine = (k) => { const me = P("me"); return SIDES.some((s2) => me[s2] && k === s2 + ":" + me[s2].id); };
   function myPerson() { return { name: P("myName"), avatar: (P("me").fluxer || P("me").discord || {}).avatar || "", games: (P("myBadges") || {}).games || {}, pilot: !!P("pilotEarned") && P("pilotBadge") !== false }; }
-  // the BelleCord Pilot badge's card
+  // pilot badge card
   function pilotCard(person, mine) {
     const box = $("gcard").querySelector(".gcbox");
     box.style.setProperty("--gc", "#e0301e");
@@ -999,7 +992,7 @@
     box.querySelector("#gc-x").onclick = () => ($("gcard").hidden = true);
     const t = box.querySelector("#gc-pilot"); if (t) t.onchange = () => setPilot(t.checked);
   }
-  // the Owner badge's card (it's only ever on mine)
+  // owner badge card
   function ownerCard(person) {
     const box = $("gcard").querySelector(".gcbox");
     box.style.setProperty("--gc", "#d4a017");
@@ -1013,10 +1006,10 @@
     if (P("hubKey")) sendBadges(true);
     toast(on ? "Your BelleCord Pilot badge is on." : "Your BelleCord Pilot badge is off. Turn it back on any time in Game badges.");
   }
-  // (the tutorial calls this when you finish it)
+  // called by the tutorial on finish
   window.bcEarnPilot = async () => { const first = !P("pilotEarned"); await save({ pilotEarned: true, ...(first ? { pilotBadge: true } : {}) }); paintBadges(); if (P("hubKey")) sendBadges(true); return first; };
 
-  // what an account name looks like for the games whose live stats need it exactly right
+  // account name formats for games whose live lookup needs an exact match
   const HANDLE_OK = {
     overwatch: [/^[^#\s]{2,32}#\d{3,8}$/, "A BattleTag looks like Name#1234"],
     valorant: [/^[^#]{3,16}#[A-Za-z0-9]{2,5}$/, "A Riot ID looks like Name#TAG"],
@@ -1024,13 +1017,13 @@
     minecraft: [/^[A-Za-z0-9_]{2,16}$/, "A Minecraft name is letters, numbers and _"],
     roblox: [/^[A-Za-z0-9_]{3,20}$/, "Use your Roblox username (letters, numbers and _), not your display name"],
   };
-  // ---- your badges (dashboard) ----
+  // dashboard badges section
   let editing = null;
   function paintBadges() {
     const mine = myPerson().games;
     setHtml($("gb-mine"), badgeList(myPerson()).map((b) => '<button class="mine" data-g="' + b.key + '"><span class="gb" style="background:' + b.color + '">' + (G.icon(b.key) || esc(b.glyph)) + "</span>" + esc(b.name) + "</button>").join(""));
     $("gb-mine").querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => openCard("me", b.dataset.g)));
-    // the Pilot badge: earned in the tutorial, on or off here
+    // pilot badge toggle
     let pr = $("gb-pilot");
     if (!pr) { pr = document.createElement("div"); pr.id = "gb-pilot"; pr.className = "card gbpilot"; $("gb-mine").after(pr); }
     setHtml(pr, P("pilotEarned")
@@ -1087,7 +1080,7 @@
       q("#ge-msg").textContent = r.ok ? "Saved" : r.error === "offline" ? "Saved on this computer; it goes up when the badge hub is on" : r.error;
       paintBadges();
     };
-    // the first time: Asuka DMs you a code on each side, to prove the accounts are yours
+    // first link: Asuka DMs a verification code on each side
     const askCode = async (need, bad) => {
       const box2 = q("#ge-code"), first = need.some((s2) => bad[s2] === "none" || bad[s2] === "expired");
       box2.hidden = false;
@@ -1133,17 +1126,17 @@
     try { return await sending; } finally { sending = null; }
   }
 
-  // ---------------- app: tray and updates ----------------
+  // app: tray + updates
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
   const flip = () => { if (P("flip")) document.body.setAttribute("data-flip", ""); else document.body.removeAttribute("data-flip"); };
   $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
-  // the swap button under the server list: the same as "Discord first" in the App section
+  // rail swap button = 'Discord first' setting
   document.querySelectorAll(".layoutsw [data-swap]").forEach((b) => (b.onclick = () => { const on = !P("flip"); save({ flip: on }); $("opt-flip").checked = on; flip(); }));
   async function checkUpdate(loud) {
     if (!host.checkUpdate) return;
     if (loud) $("upd-msg").textContent = "Checking...";
     const r = await host.checkUpdate().catch(() => null);
-    if (!r || (r.error && !loud)) { if ((checkUpdate.tries = (checkUpdate.tries || 0) + 1) <= 5) setTimeout(checkUpdate, 60000); if (!r) return; } else checkUpdate.tries = 0; // (no internet yet when the app opened: try again in a minute)
+    if (!r || (r.error && !loud)) { if ((checkUpdate.tries = (checkUpdate.tries || 0) + 1) <= 5) setTimeout(checkUpdate, 60000); if (!r) return; } else checkUpdate.tries = 0; // offline at launch: retry in a minute
     $("app-ver").textContent = (r.version ? "BelleCord Update " + r.version + " · " : "BelleCord · ") + "made by Belle";
     $("updbtn").hidden = !r.available;
     if (loud) $("upd-msg").textContent = r.available ? (r.fixes ? "Fixes for Update " + r.latest + " are ready" : "Update " + r.latest + " is ready") : r.error ? "Couldn't check" : "Up to date";
@@ -1151,11 +1144,7 @@
   const doUpdate = async () => { $("updbtn").textContent = "Updating..."; $("updbtn").disabled = true; const r = await host.applyUpdate(); if (!r.ok) { $("updbtn").textContent = "Update"; $("updbtn").disabled = false; toast("The update didn't work: " + r.error, 6000); } };
   $("updbtn").onclick = doUpdate;
 
-  // ---------------- Fix Fluxer: one button for whatever keeps Fluxer from working ----------------
-  // On the dashboard (App) and on the "Couldn't reach Fluxer" screen. It checks first, then fixes what an app can fix
-  // (old lookups and stuck connections, a broken saved copy of Fluxer, DNS that can't find Fluxer, a hosts-file line
-  // that blocks it, a proxy, Fluxer's move to fluxer.com), reloads Fluxer, checks the page really came up, and says
-  // plainly what's left for you (a VPN like Cloudflare WARP, a wrong clock, Fluxer itself being down).
+  // Fix Fluxer UI (dashboard App section + fluxer error screen), see fluxer-fix.cjs
   const FX_ICON = { run: "", ok: "✓", fixed: "✓", warn: "!", fail: "✕", skip: "-" };
   let fxRunning = false;
   function fxModal() {
@@ -1172,7 +1161,7 @@
     const ol = m.querySelector("ol");
     let li = [...ol.children].find((x) => x.dataset.id === st.id);
     if (!li) { li = document.createElement("li"); li.dataset.id = st.id; ol.appendChild(li); }
-    li.dataset.st = st.status || "run"; // (not a class: "fail" is already the Fluxer side's full-screen trouble page)
+    li.dataset.st = st.status || "run"; // not a class: .fail is already the error screen
     li.innerHTML = '<span class="i">' + (FX_ICON[st.status] ?? "") + "</span><span>" + esc(st.label) + (st.detail ? '<span class="d">' + esc(st.detail) + "</span>" : "") + "</span>";
   }
   function fxPaintCard(r) {
@@ -1196,14 +1185,14 @@
     if (report && report.restartNeeded) { head.className = "fxhead bad"; head.textContent = "Almost there - restart BelleCord to finish."; }
     else if (report && report.ok) { head.className = "fxhead good"; head.textContent = fixedSomething ? "Fluxer should be working now. ✓" : "Everything checks out - Fluxer is working. ✓"; }
     else { head.className = "fxhead bad"; head.textContent = report ? "Fluxer still isn't working from this computer - here's what's left:" : "Close BelleCord completely, open it again, then press Fix Fluxer again."; }
-    // the cause, in one line (fixed, or what's still in the way)
+    // summary line
     if (report && report.finding) { found.hidden = false; found.className = "fxfound" + (report.ok ? " fixed" : ""); found.innerHTML = "<b>" + (report.ok ? "What was wrong" : "What's wrong") + "</b>" + esc(report.finding); }
-    // what's left for you
+    // what the user still has to do
     const todos = (report && report.youDo) || [];
     const ACT = { hosts: ["Show the hosts file", () => host.fluxerHelp && host.fluxerHelp("hosts")], time: ["Open clock settings", () => host.fluxerHelp && host.fluxerHelp("time")], clean: ["Open Fluxer in a clean window", () => host.fluxerClean && host.fluxerClean()], browser: ["Open Fluxer in " + ((report && report.browser && report.browser.name) || "my browser"), () => host.fluxerHelp && host.fluxerHelp("browser")] };
     m.querySelector(".fxtodos").innerHTML = todos.length ? '<div class="fxtodo"><b>What you need to do</b>' + todos.map((t, i) => "<p>" + esc(t.text) + (t.action && ACT[t.action] ? '<br><button data-act="' + i + '">' + esc(ACT[t.action][0]) + "</button>" : "") + "</p>").join("") + "</div>" : "";
     m.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => { const t = todos[Number(b.dataset.act)]; try { ACT[t.action][1](); } catch {} }));
-    // the details (for a screenshot to me)
+    // details for bug reports
     m.querySelector(".fxtech").textContent = (report && report.tech) || "No details (Fix Fluxer didn't run).";
     const ft = m.querySelector(".fxft");
     const btn = (label, cls, fn) => { const b = document.createElement("button"); if (cls) b.className = cls; b.textContent = label; b.onclick = fn; ft.appendChild(b); return b; };
@@ -1222,10 +1211,10 @@
     if (report && report.restartNeeded && host.restartApp) btn("Restart BelleCord", "primary", () => host.restartApp());
     else btn("Done", "primary", () => m.remove());
     fxPaintCard(report);
-    // the Fluxer side's "Couldn't reach Fluxer" screen goes away once Fluxer is back
+    // hide the error screen once fluxer loads
     if (report && report.ok) { const f = $("fluxer") && $("fluxer").querySelector(".fail"); if (f) f.hidden = true; }
   }
-  // takes you to Fix Fluxer on the dashboard and points at it
+  // jump to Fix Fluxer on the dashboard
   function goToFixFluxer() {
     setMode("dash");
     let tries = 0;
@@ -1240,15 +1229,15 @@
   async function fxInit() {
     if (!host.fixFluxer) { const c = $("conncard"); if (c) c.hidden = true; return; }
     try { const last = host.fluxerLast ? await host.fluxerLast() : null; if (last && last.at) fxPaintCard({ ok: !!last.ok, finding: last.finding || "" }); } catch {}
-    // Fix Fluxer found web.fluxer.app not answering and moved you to fluxer.com: Fluxer opens there from now on
+    // fix moved us to fluxer.com: keep using it
     try {
       const home = String((host.fluxerHome && (await host.fluxerHome())) || "").replace(/\/+$/, "");
       const wv = $("wv-fluxer");
       if (home === "https://fluxer.com" && wv && !/^https:\/\/([a-z0-9-]+\.)*fluxer\.com\//i.test(wv.getAttribute("src") || "")) wv.setAttribute("src", home + "/channels/@me");
     } catch {}
   }
-  setTimeout(() => checkUpdate(), 4000); // (on its own, so nothing else at start-up can stop it)
-  // ---- sending BelleCord to a friend: the download link and a message to paste anywhere ----
+  setTimeout(() => checkUpdate(), 4000); // separate from the rest of startup so nothing can block it
+  // share: download link + message
   const DOWNLOAD = "https://github.com/preferabelle/BelleCord/releases/latest/download/BelleCord.zip";
   const SHARE_TEXT = "Try BelleCord! It puts Fluxer and Discord in one window, with themes, game badges and smooth animations. It's free:\n" + DOWNLOAD +
     "\nUnzip it, install Node.js from nodejs.org if you don't have it, then open START (Windows).bat (on a Mac, START (Mac).command). It updates itself after that.";
@@ -1272,10 +1261,10 @@
   };
   $("upd-check").onclick = async () => { await checkUpdate(true); if (!$("updbtn").hidden && confirm("Update now? BelleCord restarts.")) doUpdate(); };
 
-  // ---------------- start ----------------
+  // init
   (async () => {
     try { prefs = (await host.getPrefs()) || {}; } catch { prefs = {}; }
-    window.bcPrefsReady = true; // (perf.js, effects.js and tutorial.js wait for this)
+    window.bcPrefsReady = true; // perf.js, effects.js, tutorial.js wait for this
     if (prefs.mode === "home") prefs.mode = "fluxer";
     if (!prefs.theme) prefs.theme = { ...T.DEFAULT_STACK };
     if (prefs.fxColors && typeof prefs.fxColors === "object" && prefs.fxColors.chat) fxColors = prefs.fxColors;
@@ -1289,12 +1278,12 @@
     $("keep-colors").checked = !!P("keepColors"); $("w-str").value = P("wStr"); $("w-blur").value = P("wBlur");
     for (const s of P("todaySeen") || []) seenMsg.add(s);
     const cdLive = (P("countdowns") || []).filter((c) => c.yearly || (nextDate(c.date, false) ?? -1) >= 0);
-    if (cdLive.length !== (P("countdowns") || []).length) save({ countdowns: cdLive }); // (one-time countdowns that are over)
+    if (cdLive.length !== (P("countdowns") || []).length) save({ countdowns: cdLive }); // drop expired one-time countdowns
     setMode(P("mode"), true);
-    tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // (in case a site was quicker than your settings)
+    tick(); drawLinks(); paintCountdowns(); paintSkins(); paintStudio(); applyAll(); // re-apply in case a site loaded before prefs
     setInterval(() => { tick(); if (document.body.dataset.mode === "dash") paintDash(); }, 15000);
     $("opt-flip").checked = !!P("flip"); flip();
-    $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // (every half hour, and when you come back to the window)
+    $("opt-tray").checked = P("tray") !== false; setInterval(checkUpdate, 30 * 60000); { let lastFocusCheck = Date.now(); window.addEventListener("focus", () => { if (Date.now() - lastFocusCheck > 5 * 60000) { lastFocusCheck = Date.now(); checkUpdate(); } }); } // every 30 min and on focus
     $("pilot-name").value = P("pilotName") || "";
     $("pilot-name").onchange = () => { const v = $("pilot-name").value.trim().slice(0, 24); save({ pilotName: v }); toast(v ? "Hi, " + v + "!" : "Name cleared."); };
     askName().then(intro); paintBadges(); if (P("badgesDirty")) sendBadges(true); fxInit();

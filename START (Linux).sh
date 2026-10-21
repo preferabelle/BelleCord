@@ -14,7 +14,7 @@ if [ ! -x "node_modules/electron/dist/electron" ] || ! cmp -s package.json node_
   cp package.json node_modules/.parts
 fi
 SB="node_modules/electron/dist/chrome-sandbox"
-# Linux needs Electron's sandbox helper to belong to the system once (asks for your password one time)
+# chrome-sandbox has to be root-owned + setuid unless unprivileged user namespaces work
 if [ -f "$SB" ] && [ "$(stat -c %u "$SB")" != "0" -o "$(stat -c %a "$SB")" != "4755" ]; then
   if ! unshare -Ur true 2>/dev/null; then
     echo "One-time setup: BelleCord needs your password to finish installing its security sandbox."

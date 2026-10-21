@@ -1,13 +1,10 @@
-// Your bridge bot, on the dashboard: BridgeCord (a bot that joins a Fluxer community and a Discord server into one)
-// running on this computer while the app is open. Paste the two bot tokens, press Start, claim it, invite it.
-// The work is done by bridgebot.cjs; this is only the box you see.
+// dashboard UI for bridgebot.cjs
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
   const B = (window.bcApp || {}).bridgeBot;
   const open = (u) => { try { window.bcApp.openExternal(u); } catch {} };
-  const toast = (t, ms) => { try { window.bcToast && window.bcToast(t, ms); } catch {} };
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const { toast, esc } = window.bcUtil;
   if (!B) return;
   const GUIDE = "https://github.com/preferabelle/BridgeCord#readme";
   const HOW = "https://github.com/preferabelle/BridgeCord/blob/main/INSTALL.txt";
@@ -45,29 +42,29 @@
     $("bb-pill").textContent = st.running && st.phase !== "starting" ? "Running" : label;
     $("bb-pill").className = "pill " + (st.running && st.phase !== "starting" ? "on" : kind);
     $("bb-ver").textContent = st.tag ? (st.title || "version " + st.tag) + (st.latest && st.latest.tag && st.latest.tag !== st.tag ? " (" + (st.latest.title || st.latest.tag) + " is out)" : "") : "";
-    if (editing) return; // (don't redraw over what you're typing)
+    if (editing) return; // skip re-render while an input has focus
     let h = "";
     const t = st.tokens || {};
-    // 1. the tokens
+    // tokens
     h += '<div class="tok"><span>Fluxer bot token</span>' + (t.fluxer ? '<span><b class="ok">✓ saved</b> <a href="#" data-retoken="fluxer" class="small">change</a></span>' : '<input type="password" id="bb-fx" placeholder="Paste it here" autocomplete="off" spellcheck="false">') +
       '<span>Discord bot token</span>' + (t.discord ? '<span><b class="ok">✓ saved</b> <a href="#" data-retoken="discord" class="small">change</a></span>' : '<input type="password" id="bb-dc" placeholder="Paste it here" autocomplete="off" spellcheck="false">') + "</div>";
     if (!t.fluxer || !t.discord) h += '<div class="bbrow"><button class="primary" id="bb-save">Save tokens</button><a href="#" id="bb-how" class="small">How do I make the two bots? (5 minutes, free)</a></div><div class="dim small" style="margin-top:6px">Your tokens stay on this computer. Never paste them in a chat.</div>';
-    // 2. Node.js
+    // node
     if (st.phase === "neednode") h += '<div class="bbrow"><span>BridgeCord runs on <b>Node.js</b> (free). Install the LTS version, then press Start again.</span><button id="bb-node">Get Node.js</button></div>';
-    // 3. start / stop
+    // start/stop
     if (t.fluxer && t.discord) {
       h += '<div class="bbrow">' + (st.running ? '<button id="bb-stop">Stop</button>' : '<button class="primary" id="bb-start"' + (st.phase === "installing" ? " disabled" : "") + ">Start</button>") +
         '<button id="bb-check">Check for updates</button><button id="bb-folder" title="Where BridgeCord and its settings.txt are kept">Open its folder</button></div>' +
         '<label class="keep"><input type="checkbox" id="bb-auto"' + (st.auto ? " checked" : "") + "> Start it when BelleCord opens</label>";
     }
     if (st.note) h += '<div class="dim small" style="margin-top:8px">' + esc(st.note) + "</div>";
-    // 4. once it's running: claim it, invite it
+    // claim + invite
     if (st.claim) h += '<div class="claim"><span>Make yourself its owner. In your Fluxer community, type</span><code>' + esc(st.claim) + '</code><button id="bb-copy">Copy</button></div>';
     if (st.invites && (st.invites.discord || st.invites.fluxer)) {
       h += '<div class="bbrow">' + (st.invites.fluxer ? '<button data-inv="fluxer">➕ Add it to Fluxer</button>' : "") + (st.invites.discord ? '<button data-inv="discord">➕ Add it to Discord</button>' : "") + "</div>";
       h += '<div class="dim small" style="margin-top:6px">Then type <b>b!link all &lt;your Discord server&gt;</b> in Fluxer to bridge every channel, or <b>b!syncserver to fluxer</b> to copy your whole Discord server over. <b>b!help</b> shows everything.</div>';
     }
-    // 5. what it printed
+    // log
     if (st.log && st.log.length) h += "<details" + (st.phase === "error" || st.phase === "stopped" ? " open" : "") + '><summary class="small dim">Details</summary><pre id="bb-log">' + esc(st.log.join("\n")) + "</pre><div class=\"dim small\">If it won't start, send me a screenshot of this box.</div></details>";
     $("bb-steps").innerHTML = h;
     wire();
@@ -106,7 +103,7 @@
   }
 
   async function refresh() { try { st = await B.status(); draw(); } catch {} }
-  // (checked often while it's getting ready or starting, slowly otherwise, and only while the dashboard is open)
+  // poll fast while starting, slow otherwise; only while the dashboard is visible
   let quickUntil = 0;
   const fast = () => (quickUntil = Date.now() + 90_000);
   setInterval(() => {

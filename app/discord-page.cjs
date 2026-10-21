@@ -1,5 +1,5 @@
-// Runs in Discord's page before Discord does: Discord's sign-in page asks Windows for a passkey on its own
-// (the "choose a passkey" box every time). That automatic ask is stopped; pressing Discord's passkey button still works.
+// preload for discord.com: ignore conditional-mediation passkey requests so the login page doesn't
+// trigger the windows passkey dialog on load. the passkey button still works.
 const { webFrame } = require("electron");
 webFrame.executeJavaScript(`(function () {
   var c = navigator.credentials; if (!c || !c.get || c.__bc) return;
