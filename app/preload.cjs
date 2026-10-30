@@ -52,5 +52,6 @@ contextBridge.exposeInMainWorld("bcApp", {
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),
   onProfileKey: (fn) => ipcRenderer.on("profile-key", (e, n) => fn(n)),
   onNav: (fn) => ipcRenderer.on("nav", (e, way) => fn(String(way))),
+  chessHome: () => ipcRenderer.invoke("chess:url"),
   onNotice: (fn) => ipcRenderer.on("notice", (e, what) => fn(String(what))),
 });

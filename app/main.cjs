@@ -173,6 +173,9 @@ function hubAddress() {
   try { const a = String(JSON.parse(fs.readFileSync(path.join(__dirname, "hub.json"), "utf-8")).address || "").trim().replace(/\/+$/, ""); if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(a) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(a)) return a; } catch {}
   return null;
 }
+// chess: my bot's games live at the hub address + /chess/
+function isChessLink(url) { const base = hubAddress(); if (!base) return false; const u = String(url || ""); return u === base + "/chess" || u.startsWith(base + "/chess/"); }
+ipcMain.handle("chess:url", () => { const base = hubAddress(); return base ? base + "/chess/" : null; });
 ipcMain.handle("hub", async (e, method, route, payload) => {
   const base = hubAddress();
   if (!base) return { ok: false, status: 0, error: "offline" };
@@ -218,7 +221,10 @@ function setUp(ses) {
     } catch { answer({}); }
   });
   // google blocks sign-in from embedded browsers but allows firefox; firefox UA on google auth pages only
-  ses.webRequest.onBeforeSendHeaders({ urls: ["https://accounts.google.com/*", "https://accounts.youtube.com/*"] }, (d, cb) => {
+  // (one listener per session, so chess shares it: ngrok's free plan shows a warning page instead of the game unless this header is there)
+  const chessUrls = []; try { const b = hubAddress(); if (b) { const u = new URL(b); chessUrls.push(u.protocol + "//" + u.hostname + "/chess*"); } } catch {}
+  ses.webRequest.onBeforeSendHeaders({ urls: ["https://accounts.google.com/*", "https://accounts.youtube.com/*", ...chessUrls] }, (d, cb) => {
+    if (isChessLink(d.url)) return cb({ requestHeaders: { ...d.requestHeaders, "ngrok-skip-browser-warning": "1" } });
     if (d.resourceType !== "mainFrame") return cb({ requestHeaders: d.requestHeaders });
     const h = { ...d.requestHeaders, "User-Agent": FIREFOX_UA };
     for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
@@ -320,13 +326,14 @@ app.on("web-contents-created", (e, wc) => {
   const inPanel = () => { try { return PANEL_BASES.includes(baseOfSession(wc.session)); } catch { return false; } };
   const inPinterest = () => { try { return baseOfSession(wc.session) === "pinterest"; } catch { return false; } };
   wc.setWindowOpenHandler(({ url }) => {
+    if (isChessLink(url)) { tellShell("chess:" + url); return { action: "deny" }; } // chess links open in the Chess side panel
     if (isGoogleSignIn(url) && inPinterest()) { tellShell("pinterest-google"); return { action: "deny" }; }
     if (STAYS_IN.test(url) || isGoogleSignIn(url) || (inPanel() && /^https:\/\//i.test(url) && sameSite(wc, url))) return { action: "allow", overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, backgroundColor: "#313338", ...withIcon() } };
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   // off-site navigation opens externally
-  wc.on("will-navigate", (ev, url) => { if (isGoogleSignIn(url) && inPinterest()) { ev.preventDefault(); tellShell("pinterest-google"); return; } if (inPanel()) return; if (!STAYS_IN.test(url) && /^https?:\/\//i.test(url)) { ev.preventDefault(); shell.openExternal(url); } });
+  wc.on("will-navigate", (ev, url) => { if (!inPanel() && isChessLink(url)) { ev.preventDefault(); tellShell("chess:" + url); return; } if (isGoogleSignIn(url) && inPinterest()) { ev.preventDefault(); tellShell("pinterest-google"); return; } if (inPanel()) return; if (!STAYS_IN.test(url) && /^https?:\/\//i.test(url)) { ev.preventDefault(); shell.openExternal(url); } });
 });
 
 function open() {

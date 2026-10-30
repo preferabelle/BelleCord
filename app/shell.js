@@ -606,7 +606,10 @@
     { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" + SFX },
     { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" + SFX },
   ];
-  const allLinks = () => [...BUILTIN, ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
+  // chess: my bot's lobby, through the badge hub (only there when the hub address is set)
+  const CHESS = { id: "chess", name: "Chess", letter: "♞", url: "", part: "persist:links" + SFX };
+  BUILTIN.push(CHESS);
+  const allLinks = () => [...BUILTIN.filter((l) => l.url), ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
   const panels = new Map();
   let openId = null;
   function drawLinks() {
@@ -633,7 +636,16 @@
     drawLinks();
   }
   $("spx").onclick = closePanel;
-  $("spout").onclick = () => { const l = allLinks().find((x) => x.id === openId); if (l) host.openExternal(l.url); };
+  $("spout").onclick = () => { const l = allLinks().find((x) => x.id === openId); if (!l) return; let u = l.url; if (l.id === "chess") { try { u = panels.get("chess").getURL() || u; } catch (e) {} } host.openExternal(u); };
+  // open the Chess panel at a game (someone clicked a game link in Discord or Fluxer)
+  function chessAt(url) {
+    if (!CHESS.url) return host.openExternal(url);
+    const w = panels.get("chess");
+    if (w) { try { w.loadURL(url); } catch (e) { w.setAttribute("src", url); } if (openId !== "chess") togglePanel("chess"); return; }
+    const home = CHESS.url; CHESS.url = url; togglePanel("chess"); CHESS.url = home;
+  }
+  if (host.chessHome) host.chessHome().then((u) => { if (u) { CHESS.url = u; drawLinks(); } }).catch(() => {});
+  host.onNotice((what) => { if (what.startsWith("chess:")) chessAt(what.slice(6)); });
   $("pinnote-x").onclick = () => { $("pinnote").hidden = true; save({ pinNoteSeen: true }); };
   // pinterest: google sign-in can't work embedded, show alternatives
   host.onNotice((what) => {
