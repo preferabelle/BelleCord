@@ -173,9 +173,11 @@ function hubAddress() {
   try { const a = String(JSON.parse(fs.readFileSync(path.join(__dirname, "hub.json"), "utf-8")).address || "").trim().replace(/\/+$/, ""); if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(a) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(a)) return a; } catch {}
   return null;
 }
-// chess: my bot's games live at the hub address + /chess/
-function isChessLink(url) { const base = hubAddress(); if (!base) return false; const u = String(url || ""); return u === base + "/chess" || u.startsWith(base + "/chess/"); }
-ipcMain.handle("chess:url", () => { const base = hubAddress(); return base ? base + "/chess/" : null; });
+// chess: my bot's games live at the hub address + /chess/ (my own hub's address when this BelleCord's hub.json has none)
+const MY_HUB = "https://nebula-copper-unable.ngrok-free.dev";
+const chessBase = () => hubAddress() || MY_HUB;
+function isChessLink(url) { const base = chessBase(); if (!base) return false; const u = String(url || ""); return u === base + "/chess" || u.startsWith(base + "/chess/"); }
+ipcMain.handle("chess:url", () => chessBase() + "/chess/");
 ipcMain.handle("hub", async (e, method, route, payload) => {
   const base = hubAddress();
   if (!base) return { ok: false, status: 0, error: "offline" };
@@ -222,7 +224,7 @@ function setUp(ses) {
   });
   // google blocks sign-in from embedded browsers but allows firefox; firefox UA on google auth pages only
   // (one listener per session, so chess shares it: ngrok's free plan shows a warning page instead of the game unless this header is there)
-  const chessUrls = []; try { const b = hubAddress(); if (b) { const u = new URL(b); chessUrls.push(u.protocol + "//" + u.hostname + "/chess*"); } } catch {}
+  const chessUrls = []; try { const b = chessBase(); if (b) { const u = new URL(b); chessUrls.push(u.protocol + "//" + u.hostname + "/chess*"); } } catch {}
   ses.webRequest.onBeforeSendHeaders({ urls: ["https://accounts.google.com/*", "https://accounts.youtube.com/*", ...chessUrls] }, (d, cb) => {
     if (isChessLink(d.url)) return cb({ requestHeaders: { ...d.requestHeaders, "ngrok-skip-browser-warning": "1" } });
     if (d.resourceType !== "mainFrame") return cb({ requestHeaders: d.requestHeaders });
@@ -505,7 +507,7 @@ ipcMain.handle("update:apply", async () => {
     for (const f of files) {
       if (!f.data) continue;
       const i = f.name.indexOf("app/"), rel = i >= 0 ? f.name.slice(i) : /(^|\/)(package\.json|START [^/]+)$/.test(f.name) ? f.name.split("/").pop() : null;
-      if (!rel || rel.includes("..") || (keep.has(rel) && fs.existsSync(path.join(root, rel)))) continue;
+      if (!rel || rel.includes("..") || (keep.has(rel) && fs.existsSync(path.join(root, rel)) && !(rel === "app/hub.json" && !hubAddress()))) continue; // (a hub.json with no address gets the update's)
       const to = path.join(root, rel); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.writeFileSync(to, f.data); if (/^START /.test(rel)) { try { fs.chmodSync(to, 0o755); } catch {} } n++;
     }
     const u = updateInfo(); saveUpdateInfo({ repo: u.repo, version: Math.max(found.version, u.version), asset: found.asset, name: found.name || u.name });

@@ -3,7 +3,7 @@ window.bcWhatsNew = [
  {
   "n": 16,
   "title": "BelleCord Update 16",
-  "notes": "- Chess! There's a ♞ button up in the top bar now, next to TikTok, Pinterest and X. It opens my chess lobby: type your name, pick a color and a clock, and you get a link to send anyone. The game starts as soon as they open it.\n- You can play people on Discord and people on Fluxer in the same game. In any channel Asuka is in, type bb!chess @someone, then type your moves right in the channel (e4, Nf3, O-O). The board shows up on both sides.\n- Game links you click in Discord or Fluxer open in the Chess panel instead of your browser, so you skip the warning page.\n- Your games stay under Your games in the lobby, so you can jump back in any time."
+  "notes": "- Chess! There's a ♞ button up in the top bar now, next to TikTok, Pinterest and X. It opens my chess lobby: type your name, pick a color and a clock, and you get a link to send anyone. The game starts as soon as they open it.\n- You can play people on Discord and people on Fluxer in the same game. In any channel Asuka is in, type bb!chess @someone, then type your moves right in the channel (e4, Nf3, O-O). The board shows up on both sides.\n- Game links you click in Discord or Fluxer open in the Chess panel instead of your browser, so you skip the warning page.\n- Your games stay under Your games in the lobby, so you can jump back in any time.\n- Fixed: the ♞ button didn't show up for some of you. It's always there now."
  },
  {
   "n": 15,

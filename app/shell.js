@@ -609,7 +609,7 @@
   // chess: my bot's lobby, through the badge hub (only there when the hub address is set)
   const CHESS = { id: "chess", name: "Chess", letter: "♞", url: "", part: "persist:links" + SFX };
   BUILTIN.push(CHESS);
-  const allLinks = () => [...BUILTIN.filter((l) => l.url), ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
+  const allLinks = () => [...BUILTIN.filter((l) => l.url || l.id === "chess"), ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
   const panels = new Map();
   let openId = null;
   function drawLinks() {
@@ -624,6 +624,7 @@
   function togglePanel(id) {
     const l = allLinks().find((x) => x.id === id);
     if (!l) return;
+    if (id === "chess" && !CHESS.url) { askChess(true); return; }
     if (openId === id) return closePanel();
     if (openId && panels.get(openId)) hush(panels.get(openId), true);
     openId = id;
@@ -644,7 +645,13 @@
     if (w) { try { w.loadURL(url); } catch (e) { w.setAttribute("src", url); } if (openId !== "chess") togglePanel("chess"); return; }
     const home = CHESS.url; CHESS.url = url; togglePanel("chess"); CHESS.url = home;
   }
-  if (host.chessHome) host.chessHome().then((u) => { if (u) { CHESS.url = u; drawLinks(); } }).catch(() => {});
+  // (asked again if it fails: right after an update, BelleCord may still need its restart)
+  function askChess(open) {
+    if (!host.chessHome) { if (open) toast("Restart BelleCord to finish the update, then Chess works."); return; }
+    host.chessHome().then((u) => { if (u) { CHESS.url = u; drawLinks(); if (open) togglePanel("chess"); } else if (open) toast("Chess can't find my address right now. Try again in a minute."); })
+      .catch(() => { if (open) toast("Restart BelleCord to finish the update, then Chess works."); else setTimeout(askChess, 10000); });
+  }
+  askChess(false);
   host.onNotice((what) => { if (what.startsWith("chess:")) chessAt(what.slice(6)); });
   $("pinnote-x").onclick = () => { $("pinnote").hidden = true; save({ pinNoteSeen: true }); };
   // pinterest: google sign-in can't work embedded, show alternatives
