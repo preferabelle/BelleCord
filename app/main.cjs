@@ -176,7 +176,15 @@ function hubAddress() {
 // chess: my bot's games live at the hub address + /chess/ (my own hub's address when this BelleCord's hub.json has none)
 const MY_HUB = "https://nebula-copper-unable.ngrok-free.dev";
 const chessBase = () => hubAddress() || MY_HUB;
-function isChessLink(url) { const base = chessBase(); if (!base) return false; const u = String(url || ""); return u === base + "/chess" || u.startsWith(base + "/chess/"); }
+function isChessLink(url) {
+  // Match the game route, not yesterday's ngrok address. My games link changes when the hub's tunnel changes.
+  // Never redirect third-party web pages that just happen to have a word like "chess" in their title.
+  try {
+    const u = new URL(String(url || ""));
+    return ["http:", "https:", "ws:", "wss:"].includes(u.protocol) && !u.username && !u.password &&
+      /^\/chess(?:\/(?:g|golf|tanks|cards|a)(?:\/|$)|\/?$)/.test(u.pathname);
+  } catch { return false; }
+}
 ipcMain.handle("chess:url", () => chessBase() + "/chess/");
 ipcMain.handle("hub", async (e, method, route, payload) => {
   const base = hubAddress();
@@ -224,7 +232,7 @@ function setUp(ses) {
   });
   // google blocks sign-in from embedded browsers but allows firefox; firefox UA on google auth pages only
   // (one listener per session, so chess shares it: ngrok's free plan shows a warning page instead of the game unless this header is there)
-  const chessUrls = []; try { const b = chessBase(); if (b) { const u = new URL(b); chessUrls.push(u.protocol + "//" + u.hostname + "/chess*"); } } catch {}
+  const chessUrls = []; try { const b = chessBase(); if (b) { const u = new URL(b); chessUrls.push(u.protocol + "//" + u.hostname + "/chess*", (u.protocol === "https:" ? "wss:" : "ws:") + "//" + u.hostname + "/chess*"); } } catch {}
   ses.webRequest.onBeforeSendHeaders({ urls: ["https://accounts.google.com/*", "https://accounts.youtube.com/*", ...chessUrls] }, (d, cb) => {
     if (isChessLink(d.url)) return cb({ requestHeaders: { ...d.requestHeaders, "ngrok-skip-browser-warning": "1" } });
     if (d.resourceType !== "mainFrame") return cb({ requestHeaders: d.requestHeaders });

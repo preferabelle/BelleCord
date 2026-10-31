@@ -1,6 +1,11 @@
 // bundled release notes (fallback when GitHub is unreachable)
 window.bcWhatsNew = [
  {
+  "n": 17,
+  "title": "BelleCord Update 17",
+  "notes": "- 🕹️ Games: chess, Tanks, Mini Golf and Crazy 8s together. Discord and Fluxer friends play the same games on my hub.\n- 🪖 Tanks: four different island styles (coast, canyon, highlands and plateaus), better collision so your tank gets stuck less, and a garage to choose paint, tank body, trail and glider. The islands break when rockets hit them, the water rises, and rocket blasts launch your tank.\n- ⛳ Mini Golf: 18 holes in three themed courses, more mystery power-up boxes placed on reachable greens, and extra powers for players with none. Ball collisions, shared scores and obstacles work in multiplayer.\n- 🎮 Game invites you click in Discord or Fluxer now open inside BelleCord's Games panel, including links from a changed game hub address. You can still choose to open one in your browser.\n- 🎲 Discord Activities can announce a matching BelleCord game to Fluxer, and voice-call friends can join the same match.\n- I also made the game connections and bridge more stable under load. My game hub has to be running for online play.\n"
+ },
+ {
   "n": 16,
   "title": "BelleCord Update 16",
   "notes": "- Chess! There's a ♞ button up in the top bar now, next to TikTok, Pinterest and X. It opens my chess lobby: type your name, pick a color and a clock, and you get a link to send anyone. The game starts as soon as they open it.\n- You can play people on Discord and people on Fluxer in the same game. In any channel Asuka is in, type bb!chess @someone, then type your moves right in the channel (e4, Nf3, O-O). The board shows up on both sides.\n- Game links you click in Discord or Fluxer open in the Chess panel instead of your browser, so you skip the warning page.\n- Your games stay under Your games in the lobby, so you can jump back in any time.\n- Fixed: the ♞ button didn't show up for some of you. It's always there now."

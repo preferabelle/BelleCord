@@ -606,8 +606,19 @@
     { id: "pinterest", name: "Pinterest", letter: "P", url: "https://www.pinterest.com/", part: "persist:pinterest" + SFX },
     { id: "x", name: "X", letter: "𝕏", url: "https://x.com/", part: "persist:x" + SFX },
   ];
-  // chess: my bot's lobby, through the badge hub (only there when the hub address is set)
-  const CHESS = { id: "chess", name: "Chess", letter: "♞", url: "", part: "persist:links" + SFX };
+  // games: my bot's games page (chess, tanks), through the badge hub
+  const CHESS = { id: "chess", name: "Games", letter: "🕹️", url: "", part: "persist:links" + SFX };
+  // the Fluxer channel you're looking at, so the games page can start Tanks for everyone in it
+  function channelQuery() {
+    try {
+      const w = $("wv-fluxer"), u = new URL(w.getURL()), m = u.pathname.match(/^\/channels\/(\d{5,25})\/(\d{5,25})/);
+      if (!m) return "";
+      let name = "";
+      try { name = String(w.getTitle() || "").split(/[|·•]/)[0].replace(/^[#\s]+/, "").replace(/\s*-\s*Fluxer\s*$/i, "").trim().slice(0, 40); } catch (e) {}
+      if (/^fluxer$/i.test(name)) name = "";
+      return "?vc=" + encodeURIComponent("f:" + m[1] + ":" + m[2]) + (name ? "&vcname=" + encodeURIComponent(name) : "");
+    } catch (e) { return ""; }
+  }
   BUILTIN.push(CHESS);
   const allLinks = () => [...BUILTIN.filter((l) => l.url || l.id === "chess"), ...(P("links") || []).map((l) => ({ ...l, letter: (l.name || "?").slice(0, 1).toUpperCase(), part: "persist:links" + SFX }))];
   const panels = new Map();
@@ -629,7 +640,12 @@
     if (openId && panels.get(openId)) hush(panels.get(openId), true);
     openId = id;
     let w = panels.get(id);
-    if (!w) { w = document.createElement("webview"); w.setAttribute("partition", l.part); w.setAttribute("allowpopups", ""); w.setAttribute("src", l.url); $("spbody").appendChild(w); panels.set(id, w); }
+    const src = id === "chess" && /\/chess\/$/.test(l.url) ? l.url + channelQuery() : l.url;
+    if (!w) { w = document.createElement("webview"); w.setAttribute("partition", l.part); w.setAttribute("allowpopups", ""); w.setAttribute("src", src); $("spbody").appendChild(w); panels.set(id, w); }
+    else if (id === "chess" && src !== l.url) {
+      // (back on the games page, it follows the channel you're looking at; a game you're in is left alone)
+      try { const now = new URL(w.getURL()); if (/\/chess\/?$/.test(now.pathname)) w.loadURL(src); } catch (e) {}
+    }
     panels.forEach((x) => x.classList.toggle("on", x === w));
     hush(w, false);
     $("sptitle").textContent = l.name; $("sidepanel").hidden = false;
@@ -640,7 +656,8 @@
   $("spout").onclick = () => { const l = allLinks().find((x) => x.id === openId); if (!l) return; let u = l.url; if (l.id === "chess") { try { u = panels.get("chess").getURL() || u; } catch (e) {} } host.openExternal(u); };
   // open the Chess panel at a game (someone clicked a game link in Discord or Fluxer)
   function chessAt(url) {
-    if (!CHESS.url) return host.openExternal(url);
+    // A shared invite works even before the hub's address has loaded into the Games shortcut.
+    if (!CHESS.url) { try { CHESS.url = new URL("/chess/", url).href; drawLinks(); } catch (e) { return; } }
     const w = panels.get("chess");
     if (w) { try { w.loadURL(url); } catch (e) { w.setAttribute("src", url); } if (openId !== "chess") togglePanel("chess"); return; }
     const home = CHESS.url; CHESS.url = url; togglePanel("chess"); CHESS.url = home;
