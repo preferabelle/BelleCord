@@ -367,6 +367,12 @@ function open() {
     webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true, spellcheck: true, preload: path.join(__dirname, "preload.cjs") },
   });
   if (p?.max) win.maximize();
+  // what a taskbar pin made from this window opens: BelleCord, not plain Electron (the "electron.exe path-to-app"
+  // screen), with the BelleCord icon. Windows only uses it with the display name set too.
+  if (process.platform === "win32") {
+    const dir = path.join(__dirname, "..");
+    try { win.setAppDetails({ appId: NAME, relaunchCommand: `"${process.execPath}" "${dir}"`, relaunchDisplayName: NAME, ...(fs.existsSync(ICON) ? { appIconPath: ICON, appIconIndex: 0 } : {}) }); } catch {}
+  }
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: "deny" }; });
   // webviews: no preload, sandboxed, known partitions and hosts only
   win.webContents.on("will-attach-webview", (e, prefs2, params) => {
