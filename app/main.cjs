@@ -186,6 +186,17 @@ function isChessLink(url) {
   } catch { return false; }
 }
 ipcMain.handle("chess:url", () => chessBase() + "/chess/");
+let gameOwnsFullscreen = false;
+ipcMain.handle("game:fullscreen", (e, on) => {
+  if (e.sender !== win?.webContents || !win || win.isDestroyed()) return false;
+  if (on) {
+    if (!win.isFullScreen()) { gameOwnsFullscreen = true; win.setFullScreen(true); }
+  } else if (gameOwnsFullscreen) {
+    gameOwnsFullscreen = false;
+    if (win.isFullScreen()) win.setFullScreen(false);
+  }
+  return true;
+});
 ipcMain.handle("hub", async (e, method, route, payload) => {
   const base = hubAddress();
   if (!base) return { ok: false, status: 0, error: "offline" };

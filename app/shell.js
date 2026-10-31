@@ -631,7 +631,16 @@
   }
   const QUIET = "document.querySelectorAll('video,audio').forEach(function(m){try{m.pause()}catch(e){}});1";
   function hush(w, off) { try { w.setAudioMuted(!!off); } catch {} if (off) { try { w.executeJavaScript(QUIET).catch(() => {}); } catch {} } }
-  function closePanel() { const w = panels.get(openId); if (w) hush(w, true); $("sidepanel").hidden = true; openId = null; drawLinks(); }
+  function closePanel() {
+    const wasGame = openId === "chess";
+    const w = panels.get(openId);
+    if (w) hush(w, true);
+    $("sidepanel").hidden = true;
+    openId = null;
+    document.body.classList.remove("bc-game-fullscreen");
+    if (wasGame) host.gameFullscreen?.(false)?.catch?.(() => {});
+    drawLinks();
+  }
   function togglePanel(id) {
     const l = allLinks().find((x) => x.id === id);
     if (!l) return;
@@ -649,6 +658,9 @@
     panels.forEach((x) => x.classList.toggle("on", x === w));
     hush(w, false);
     $("sptitle").textContent = l.name; $("sidepanel").hidden = false;
+    document.body.classList.toggle("bc-game-fullscreen", id === "chess");
+    if (id === "chess") host.gameFullscreen?.(true)?.catch?.(() => {});
+    else host.gameFullscreen?.(false)?.catch?.(() => {});
     $("pinnote").hidden = !(id === "pinterest" && !P("pinNoteSeen"));
     drawLinks();
   }

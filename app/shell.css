@@ -107,6 +107,11 @@ body.dragging .site,body.dragging #sidepanel{pointer-events:none}
 .fail[hidden]{display:none}.fail .why{color:var(--dim);max-width:420px}
 #sidepanel{position:absolute;top:0;right:0;bottom:0;width:440px;background:var(--side);border-left:1px solid var(--line);z-index:6;display:flex;flex-direction:column;box-shadow:-10px 0 30px rgba(0,0,0,.3)}
 #sidepanel[hidden]{display:none}
+/* Games are played fullscreen, not squeezed into the quick-links drawer. */
+body.bc-game-fullscreen #sidepanel{position:fixed;inset:0;width:100vw;height:100vh;z-index:10000;border:0;box-shadow:none}
+body.bc-game-fullscreen #spbody,body.bc-game-fullscreen #spbody webview.on{min-width:0;min-height:0}
+body.bc-game-fullscreen #sidepanel .sphead{flex:none;min-height:42px;background:#171b2a}
+
 .sphead{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}.sphead b{flex:1}
 .sphead button{background:transparent;padding:3px 8px;color:var(--dim)}.sphead button:hover{color:var(--strong);background:var(--raised)}
 #pinnote{margin:8px;padding:10px 12px;border-radius:var(--r);background:color-mix(in srgb,#e60023 18%,var(--side));border:1px solid color-mix(in srgb,#e60023 45%,transparent);font-size:13px;line-height:1.45}
