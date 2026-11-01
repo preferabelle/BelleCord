@@ -609,7 +609,21 @@
   // games: my bot's games page (chess, tanks), through the badge hub
   const CHESS = { id: "chess", name: "Games", letter: "🕹️", url: "", part: "persist:links" + SFX };
   // the Fluxer channel you're looking at, so the games page can start Tanks for everyone in it
+  // (the games page gets your name and your Fluxer or Discord picture, so everyone sees who you are in the games)
+  function whoQuery() {
+    try {
+      const me = P("me") || {}, acc = me.fluxer || me.discord || {}, name = P("myName") || acc.name || "";
+      const q = [];
+      if (name) q.push("who=" + encodeURIComponent(String(name).slice(0, 24)));
+      if (acc.avatar && /^https:\/\//.test(acc.avatar)) q.push("pic=" + encodeURIComponent(acc.avatar));
+      return q.join("&");
+    } catch (e) { return ""; }
+  }
   function channelQuery() {
+    const who = whoQuery(), vc = vcQuery();
+    return vc && who ? vc + "&" + who : vc || (who ? "?" + who : "");
+  }
+  function vcQuery() {
     try {
       const w = $("wv-fluxer"), u = new URL(w.getURL()), m = u.pathname.match(/^\/channels\/(\d{5,25})\/(\d{5,25})/);
       if (!m) return "";
