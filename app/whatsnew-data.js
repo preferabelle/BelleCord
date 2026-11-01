@@ -2,7 +2,7 @@ window.bcWhatsNew = [
   {
     "n": 18,
     "title": "BelleCord Update 18",
-    "notes": "- Tanks is rebuilt and plays like Rocket Bot Royale: drop from the blimp, slower tanks, 3 rockets that reload, rocket jumps.\n- Levels, goals and the armory work like Rocket Bot Royale too. 13 weapons and 7 perks unlock as you level up.\n- Coins from matches buy tanks, paints, gliders and trails in the Garage.\n- 10 maps now, including Beach and Castle.\n- Mini golf plays like Putt Party and loads for friends without the reload screen.\n- Chess, Tanks, Mini golf and Crazy 8s work across Discord and Fluxer, and open inside BelleCord.\n- Pinning BelleCord to the taskbar works properly now."
+    "notes": "- Tanks is rebuilt and plays like Rocket Bot Royale: drop from the blimp, slower tanks, 3 rockets that reload, rocket jumps.\n- Levels, goals and the armory work like Rocket Bot Royale too. 13 weapons and 7 perks unlock as you level up.\n- Coins from matches buy tanks, paints, gliders and trails in the Garage.\n- 10 maps now, including Beach and Castle.\n- Mini golf: everyone votes for the course like Putt Party, and there are 7 courses now, each with its own tricks. It loads for friends without the reload screen too.\n- Chess, Tanks, Mini golf and Crazy 8s work across Discord and Fluxer, and open inside BelleCord.\n- Pinning BelleCord to the taskbar works properly now."
   },
   {
     "n": 17,
