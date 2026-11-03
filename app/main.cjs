@@ -43,6 +43,8 @@ const baseOfSession = (ses) => SES_BASE.get(ses) || null;
 // webview keeps its gateway connection. all in one --disable-features switch.
 app.commandLine.appendSwitch("disable-features", "WebRtcAllowInputVolumeAdjustment,FedCm,FedCmButtonMode,IntensiveWakeUpThrottling,AllowAggressiveThrottlingWithWebSocket");
 app.commandLine.appendSwitch("disable-blink-features", "FedCm");
+// calls can be turned up past 100% (volume.js): that sound plays as soon as a call starts, without waiting for a click
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.userAgentFallback = CHROME_UA;
 app.setAppUserModelId(NAME);
 if (!app.requestSingleInstanceLock()) { app.quit(); return; }
