@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("bcApp", {
     arm: (sourceId) => ipcRenderer.invoke("share:arm", String(sourceId || "")),
     onShare: (fn) => { ipcRenderer.on("bc-share", (e, d) => { try { fn(d); } catch (x) {} }); },
     onState: (fn) => { ipcRenderer.on("bc-share-state", (e, d) => { try { fn(String(d || "")); } catch (x) {} }); },
+    setCall: (d) => ipcRenderer.send("bc-bridge-call", { inCall: !!(d && d.inCall) }),
   },
   notify: (title, body) => ipcRenderer.invoke("notify", { title, body }),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),

@@ -259,11 +259,17 @@ function setUp(ses) {
         return same ? answer({ video: same }) : answer({});
       }
       const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true });
-      const chosen = await pickSource(sources);
-      if (!chosen) return answer({});
+      // (going live on Discord while you're in my bridged call: the box also asks whether it should show on Fluxer
+      //  too, right where you pick what to share)
+      const forDiscord = baseOfSession(ses) === "discord";
+      const offer = forDiscord && bridgeCall.inCall && Date.now() - bridgeCall.at < 45000;
+      const picked = await pickSource(sources, offer ? { toFluxer: readPrefs().streamToFluxer !== false } : null);
+      if (!picked) return answer({});
+      const chosen = picked.source;
       answer({ video: chosen, ...(process.platform === "win32" ? { audio: "loopback" } : {}) });
+      if (offer && typeof picked.toFluxer === "boolean") { try { writePrefs({ streamToFluxer: picked.toFluxer }); } catch {} }
       // (going live on Discord: BelleCord can show it on Fluxer too, bridgestream.js)
-      if (baseOfSession(ses) === "discord") { try { if (win && !win.isDestroyed()) win.webContents.send("bc-share", { side: "discord", sourceId: chosen.id, name: chosen.name }); } catch {} }
+      if (forDiscord) { try { if (win && !win.isDestroyed()) win.webContents.send("bc-share", { side: "discord", sourceId: chosen.id, name: chosen.name, toFluxer: offer ? picked.toFluxer : null }); } catch {} }
     } catch { answer({}); }
   });
   // google blocks sign-in from embedded browsers but allows firefox; firefox UA on google auth pages only
@@ -292,10 +298,13 @@ function setUp(ses) {
 function tellShell(what) { try { if (win && !win.isDestroyed()) win.webContents.send("notice", what); } catch {} }
 // streams across the bridge (bridgestream.js): the screen the shell may capture next, and when Discord's stream ends
 let armedShare = null;
+// (bridgestream.js says whether you're in my bridged call, so the share box knows to offer Fluxer)
+let bridgeCall = { inCall: false, at: 0 };
+ipcMain.on("bc-bridge-call", (e, d) => { if (win && e.sender === win.webContents) bridgeCall = { inCall: !!(d && d.inCall), at: Date.now() }; });
 ipcMain.handle("share:arm", (e, id) => { if (win && e.sender === win.webContents && /^(screen|window):[\w:-]+$/.test(String(id || ""))) armedShare = { id: String(id), at: Date.now() }; return !!armedShare; });
 ipcMain.on("bc-share-state", (e, what) => { try { if (baseOfSession(e.sender.session) === "discord" && win && !win.isDestroyed()) win.webContents.send("bc-share-state", String(what || "").slice(0, 20)); } catch {} });
 
-function pickSource(sources) {
+function pickSource(sources, opts = null) {
   return new Promise((resolve) => {
     const picker = new BrowserWindow({
       parent: win, modal: true, width: 760, height: 560, resizable: false, minimizable: false, maximizable: false,
@@ -303,8 +312,8 @@ function pickSource(sources) {
       webPreferences: { nodeIntegration: true, contextIsolation: false },
     });
     let done = false;
-    const finish = (id) => { if (done) return; done = true; resolve(sources.find((s) => s.id === id) || null); if (!picker.isDestroyed()) picker.close(); };
-    const onPick = (e, id) => { if (e.sender === picker.webContents) finish(id); };
+    const finish = (id, extra) => { if (done) return; done = true; const source = sources.find((s) => s.id === id) || null; resolve(source ? { source, toFluxer: extra && typeof extra.toFluxer === "boolean" ? extra.toFluxer : null } : null); if (!picker.isDestroyed()) picker.close(); };
+    const onPick = (e, id, extra) => { if (e.sender === picker.webContents) finish(id, extra); };
     ipcMain.on("bc-pick", onPick);
     picker.on("closed", () => { ipcMain.removeListener("bc-pick", onPick); finish(null); });
     const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -314,10 +323,12 @@ function pickSource(sources) {
       .g{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-height:420px;overflow:auto}
       .t{background:#2b2d31;border-radius:8px;padding:8px;cursor:pointer;border:2px solid transparent}.t:hover{border-color:#5865f2}
       .t img{width:100%;border-radius:4px;display:block;background:#000}.t b{display:block;margin-top:6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .r{display:flex;justify-content:flex-end;margin-top:14px}button{background:#4e5058;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}
-      </style><h2>Share your screen</h2><div class="g">${tiles}</div><div class="r"><button id="x">Cancel</button></div>
+      .r{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:14px}button{background:#4e5058;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}
+      .fx{flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#dbdee1;cursor:pointer;background:#2b2d31;border-radius:8px;padding:8px 10px}.fx small{color:#949ba4}.fx input{width:16px;height:16px;accent-color:#5865f2;margin:0;flex:none}
+      </style><h2>Share your screen</h2><div class="g">${tiles}</div><div class="r">${opts ? `<label class="fx"><input type="checkbox" id="fx"${opts.toFluxer ? " checked" : ""}><span>Also show it on Fluxer <small>(in my bridged call, so the people on Fluxer can watch too)</small></span></label>` : ""}<button id="x">Cancel</button></div>
       <script>const { ipcRenderer } = require("electron");
-      document.querySelectorAll(".t").forEach((t) => (t.onclick = () => ipcRenderer.send("bc-pick", t.dataset.id)));
+      const fx = document.getElementById("fx");
+      document.querySelectorAll(".t").forEach((t) => (t.onclick = () => ipcRenderer.send("bc-pick", t.dataset.id, fx ? { toFluxer: fx.checked } : null)));
       document.getElementById("x").onclick = () => ipcRenderer.send("bc-pick", null);
       addEventListener("keydown", (e) => { if (e.key === "Escape") ipcRenderer.send("bc-pick", null); });</script>`;
     picker.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));

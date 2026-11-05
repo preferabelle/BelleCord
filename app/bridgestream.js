@@ -1,9 +1,10 @@
 // Streams across my bridge. My bot can't carry streams between Fluxer and Discord by itself (Discord doesn't let bots
 // watch or send streams), so BelleCord does it, for anyone in my bridged call who uses BelleCord:
 //  - Go live on Discord, and the same screen shows in the Fluxer call too, as your bridge bot. Everyone on Fluxer can
-//    watch it, BelleCord or not.
-//  - Someone streams on Fluxer: a "Watch" button shows up here, and the stream plays in a little window over Discord
-//    (drag it around, resize it from the corner, fullscreen with ⛶).
+//    watch it, BelleCord or not. The box where you pick what to share has the switch ("Also show it on Fluxer").
+//  - Someone streams on Fluxer: a "Watch" button shows up in Discord's own call panel (bottom left, under the call
+//    buttons), and the stream plays in a little window over Discord (drag it around, resize it from the corner,
+//    fullscreen with ⛶).
 // My bot sets it up (it asks Fluxer for a second connection for your bridge bot, through my badge hub, which knows
 // it's really you because you proved your Discord account with Asuka's code). The video itself goes straight between
 // your PC and Fluxer: it never goes through my PC. Dashboard > App has the switches.
@@ -32,7 +33,74 @@
     document.head.appendChild(s);
   }));
 
-  // ---------------------------------------------------------------- the little bar (bottom left)
+  // ---------------------------------------------------------------- in Discord's own call panel
+  // (drawn inside Discord's page, under its call buttons, where you go live; if Discord's panel isn't there, a small
+  //  pill at the top of the page instead. A click comes back here as a console line.)
+  const ROW_PAGE = "(" + function () {
+    if (window.__bcBridgeRow) return 1;
+    var state = { rows: [] };
+    var esc = function (t) { return String(t == null ? "" : t).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+    var css = document.createElement("style");
+    css.textContent = "#bc-bridge-row{display:flex;flex-direction:column;gap:4px;margin:6px 8px 4px;font:500 13px/1.3 var(--font-primary,'gg sans','Noto Sans',sans-serif);color:var(--text-normal,#dbdee1)}" +
+      "#bc-bridge-row .r{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--background-modifier-hover,rgba(255,255,255,.06))}" +
+      "#bc-bridge-row .r span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#bc-bridge-row .r b{font-weight:650}" +
+      "#bc-bridge-row .dot{width:8px;height:8px;border-radius:50%;background:#f23f43;box-shadow:0 0 0 3px rgba(242,63,67,.22);flex:none}" +
+      "#bc-bridge-row .tag{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.04em;color:#fff;background:#f23f43;border-radius:4px;padding:1px 5px;flex:none}" +
+      "#bc-bridge-row button{border:0;border-radius:6px;padding:4px 10px;font:inherit;font-weight:600;cursor:pointer;background:var(--button-filled-brand-background,#5865f2);color:#fff;flex:none}" +
+      "#bc-bridge-row button.x{background:var(--button-secondary-background,#4e5058)}#bc-bridge-row .note{color:var(--text-muted,#949ba4)}" +
+      "#bc-bridge-row.float{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:1000;margin:0;min-width:260px;max-width:min(460px,80vw);box-shadow:0 8px 24px rgba(0,0,0,.4);border-radius:10px;background:var(--background-floating,#111214);padding:4px}";
+    document.head.appendChild(css);
+    var anchor = function () {
+      var area = document.querySelector('section[aria-label="User area"]') || document.querySelector('section[class*="panels"]');
+      if (!area) return null;
+      var bs = area.querySelectorAll("button[aria-label]");
+      for (var i = 0; i < bs.length; i++) if (/share (your )?screen|go live|screen share|stream/i.test(bs[i].getAttribute("aria-label"))) return bs[i].parentElement;
+      return null;
+    };
+    var draw = function () {
+      var el = document.getElementById("bc-bridge-row");
+      if (!state.rows || !state.rows.length) { if (el) el.remove(); return; }
+      if (!el) {
+        el = document.createElement("div"); el.id = "bc-bridge-row"; el.setAttribute("role", "status");
+        el.addEventListener("click", function (e) { var b = e.target.closest ? e.target.closest("[data-a]") : null; if (!b) return; console.log("__bcbr:" + JSON.stringify({ a: b.getAttribute("data-a"), id: b.getAttribute("data-id") || "", n: b.getAttribute("data-n") || "" })); });
+      }
+      var html = state.rows.map(function (r) {
+        if (r.kind === "pub") return '<div class="r"><i class="dot"></i><span>Your stream is on Fluxer too</span><button class="x" data-a="stoppub">Stop</button></div>';
+        if (r.kind === "stream") return '<div class="r"><i class="tag">LIVE</i><span><b>' + esc(r.name) + '</b> on Fluxer</span><button data-a="watch" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>';
+        return '<div class="r note"><span title="' + esc(r.text) + '">' + esc(r.text) + "</span></div>";
+      }).join("");
+      if (el.__html !== html) { el.innerHTML = html; el.__html = html; }
+      var a = anchor();
+      if (a) { if (a.nextElementSibling !== el) a.after(el); el.classList.remove("float"); }
+      else { if (el.parentElement !== document.body) document.body.appendChild(el); el.classList.add("float"); }
+    };
+    window.__bcBridgeRow = function (s) { state = s || { rows: [] }; draw(); return 1; };
+    setInterval(draw, 1000); // (Discord redraws its panel now and then: the row goes back in)
+    return 1;
+  }.toString() + ")()";
+  const page = () => $("wv-discord");
+  let inPage = false;
+  const pushRows = (rows) => {
+    const v = page();
+    if (!v || !v.executeJavaScript) { inPage = false; return; }
+    v.executeJavaScript(ROW_PAGE + ";window.__bcBridgeRow(" + JSON.stringify({ rows }) + ")").then(() => { inPage = true; }).catch(() => { inPage = false; });
+  };
+  const wireUp = () => {
+    const v = page();
+    if (!v || v.__bcbr) return;
+    v.__bcbr = true;
+    v.addEventListener("console-message", (e) => {
+      const m = String(e.message || "");
+      if (!m.startsWith("__bcbr:")) return;
+      let o = null; try { o = JSON.parse(m.slice(7)); } catch (x) { return; }
+      if (o.a === "stoppub") stopPublish("Stopped showing it on Fluxer.");
+      if (o.a === "watch" && o.id) startWatch(String(o.id), String(o.n || "Someone")).catch((x) => say("Couldn't open their stream: " + (x && x.message ? x.message : x)));
+    });
+    v.addEventListener("dom-ready", () => draw());
+  };
+  setInterval(wireUp, 3000); setTimeout(wireUp, 800);
+
+  // ---------------------------------------------------------------- the little bar (only when Discord's page can't show it)
   const css = document.createElement("style");
   css.textContent = [
     "#bcbs{position:fixed;left:84px;bottom:14px;z-index:99990;display:flex;flex-direction:column;gap:6px;max-width:min(420px,60vw);pointer-events:none}",
@@ -60,15 +128,20 @@
   let pub = null;  // { room, track, connectionId, timer }
   let watch = null; // { room, connectionId, identity, name, timer }
   function draw() {
-    const rows = [];
-    if (pub) rows.push('<div class="row"><span class="live"></span><span class="t">Your Discord stream is on Fluxer too.</span><button class="x" data-a="stoppub">Stop</button></div>');
+    const list = [];
+    if (pub) list.push({ kind: "pub" });
     if (info && info.inCall && on("watchFluxer")) {
       for (const s of (info.streams || []).slice(0, 3)) {
         if (watch && watch.identity === s.identity) continue;
-        rows.push('<div class="row"><span class="live"></span><span class="t"><b>' + esc(s.name) + "</b> is streaming on Fluxer</span><button data-a=\"watch\" data-id=\"" + esc(s.identity) + '" data-n="' + esc(s.name) + '">Watch</button></div>');
+        list.push({ kind: "stream", id: s.identity, name: s.name });
       }
     }
-    if (note) rows.push('<div class="row"><span class="t">' + esc(note) + "</span></div>");
+    if (note) list.push({ kind: "note", text: note });
+    pushRows(list);
+    // (the little bar over the window only when Discord's page didn't take it)
+    const rows = inPage ? [] : list.map((r) => r.kind === "pub" ? '<div class="row"><span class="live"></span><span class="t">Your Discord stream is on Fluxer too.</span><button class="x" data-a="stoppub">Stop</button></div>'
+      : r.kind === "stream" ? '<div class="row"><span class="live"></span><span class="t"><b>' + esc(r.name) + '</b> is streaming on Fluxer</span><button data-a="watch" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>'
+      : '<div class="row"><span class="t">' + esc(r.text) + "</span></div>");
     bar.innerHTML = rows.join("");
     bar.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => {
       if (b.dataset.a === "stoppub") stopPublish("Stopped showing it on Fluxer.");
@@ -82,6 +155,7 @@
     if (!prefs.hubKey) { info = null; return draw(); }
     const r = await hub("info");
     info = r.ok ? r.data : null;
+    try { host.share && host.share.setCall && host.share.setCall({ inCall: !!(info && info.inCall) }); } catch (e) {}
     // (left the call: everything stops)
     if (info && !info.inCall) { if (pub) stopPublish(); if (watch) stopWatch(); }
     draw();
@@ -95,9 +169,9 @@
   }, 30000);
 
   // ---------------------------------------------------------------- your Discord stream, on Fluxer too
-  async function startPublish(sourceId) {
+  async function startPublish(sourceId, asked) {
     await getPrefs();
-    if (!on("streamToFluxer") || pub) return;
+    if (pub || asked === false || (asked !== true && !on("streamToFluxer"))) return;
     if (!prefs.hubKey) return;
     const i = await hub("info");
     if (!i.ok || !i.data || !i.data.inCall) return; // (not in my bridged call: nothing to do)
@@ -138,7 +212,7 @@
     if (why) say(why); else draw();
   }
   if (host.share) {
-    host.share.onShare((d) => { if (d && d.side === "discord" && d.sourceId) startPublish(d.sourceId); });
+    host.share.onShare((d) => { if (d && d.side === "discord" && d.sourceId) startPublish(d.sourceId, typeof d.toFluxer === "boolean" ? d.toFluxer : undefined); });
     host.share.onState((what) => { if (what === "ended") stopPublish(); });
   }
 
@@ -215,7 +289,7 @@
     }
     const verified = !!prefs.hubKey;
     box.innerHTML = '<h3>Streams across my bridge</h3><p class="dim small">In my bridged call, streams cross between Fluxer and Discord for everyone who uses BelleCord. The video goes straight between you and Fluxer.</p>' +
-      '<label class="keep"><input type="checkbox" id="bs-pub"' + (on("streamToFluxer") ? " checked" : "") + "> When I go live on Discord, show it on Fluxer too</label><br>" +
+      '<label class="keep"><input type="checkbox" id="bs-pub"' + (on("streamToFluxer") ? " checked" : "") + "> When I go live on Discord, show it on Fluxer too (the share box asks each time, with this as the answer it starts on)</label><br>" +
       '<label class="keep"><input type="checkbox" id="bs-watch"' + (on("watchFluxer") ? " checked" : "") + "> Offer Fluxer streams to watch while I'm on Discord</label>" +
       (verified ? "" : '<p class="dim small">This needs your Discord account proven once: set up your game badges (it sends you a code from Asuka).</p>') +
       (info ? '<p class="dim small" role="status">' + (info.inCall ? "You're in the bridged call" + (info.channel ? " (" + esc(info.channel) + ")" : "") + (info.canStream ? "." : ", but your bridge bot isn't in the Fluxer call yet.") : "You're not in the bridged call right now.") + "</p>" : "");

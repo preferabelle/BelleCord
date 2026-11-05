@@ -17,8 +17,8 @@ themes, skins, game badges and a bridge bot you can run yourself.
 - Game badges: Overwatch, Minecraft, Roblox, chess and more, next to your name for everyone with BelleCord.
 - Noise suppression: my own, on Fluxer and Discord. DeepFilterNet runs on your PC and takes keyboard clicks, fans,
   dogs and background talking out of your mic in calls (Max, Balanced or Off).
-- Streams across my bridge: in my bridged call, Discord screen shares show on Fluxer and Fluxer streams can be
-  watched in a small window.
+- Streams across my bridge: in my bridged call, going live on Discord can show on Fluxer too (the share box asks),
+  and Fluxer streams get a Watch button under Discord's call buttons.
 - Games: chess with friends on Fluxer and Discord from the Games button. Mini golf, Tanks and Crazy 8s are switched
   off for now while I refine them.
 - Your bridge bot: join your own Fluxer community and Discord server into one. BridgeCord comes with the app.

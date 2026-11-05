@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const host = window.bcApp || {};
   const CHOICES = [
-    ["max", "Max", "Takes out everything that isn't your voice: keyboards, fans, dogs, people in the background."],
+    ["max", "Max", "Takes out keyboards, fans, dogs and hum. Voices far back in the room get quieter too, but someone right next to you still comes through (it's a voice too)."],
     ["balanced", "Balanced", "Takes out most noise but leaves a little room, so your voice sounds a bit more natural."],
     ["off", "Off", "Your mic exactly as it is (Fluxer's own setting comes back)."],
   ];
@@ -26,7 +26,7 @@
       ($("volcard") || card).after(box);
     }
     const cur = CHOICES.find((c) => c[0] === level) || CHOICES[0];
-    box.innerHTML = '<h3>Noise suppression</h3><p class="dim small">BelleCord\'s own filter, on Fluxer and Discord. It runs on your PC in the background, so it doesn\'t slow down games or make your voice crackle.</p>' +
+    box.innerHTML = '<h3>Noise suppression</h3><p class="dim small">BelleCord\'s own filter, on Fluxer and Discord. It runs on your PC in the background, so it doesn\'t slow down games or make your voice crackle. On Discord, set Discord\'s own Noise Suppression (Voice & Video) to None while this is on, so the two don\'t stack.</p>' +
       '<div class="pchips" id="noise-seg">' + CHOICES.map((c) => '<button data-v="' + c[0] + '"' + (c[0] === level ? ' class="on"' : "") + ">" + c[1] + "</button>").join("") + "</div>" +
       '<p class="dim small">' + cur[2] + (note ? " " + note : "") + "</p>";
     box.querySelectorAll("[data-v]").forEach((b) => (b.onclick = async () => {
