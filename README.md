@@ -15,12 +15,10 @@ themes, skins, game badges and a bridge bot you can run yourself.
   games, anime, my book Soulbound, and moods.
 - Skin studio: a different look on each side, with your own picture, banner and wallpaper.
 - Game badges: Overwatch, Minecraft, Roblox, chess and more, next to your name for everyone with BelleCord.
-- Noise suppression: my own, on Fluxer and Discord. DeepFilterNet runs on your PC and takes keyboard clicks, fans,
-  dogs and background talking out of your mic in calls (Max, Balanced or Off).
-- Streams across my bridge: in my bridged call, going live on Discord can show on Fluxer too (the share box asks),
-  and Fluxer streams get a Watch button under Discord's call buttons.
-- Games: chess with friends on Fluxer and Discord from the Games button. Mini golf, Tanks and Crazy 8s are switched
-  off for now while I refine them.
+- Noise suppression: my own, on Fluxer and Discord.
+- Streams between Fluxer and Discord in a bridged call: going live on Discord can show on Fluxer too (the share box
+  asks), and Fluxer streams get a Watch button under Discord's call buttons. You can set it up on your own bridge too.
+- Chess with friends on Fluxer and Discord.
 - Your bridge bot: join your own Fluxer community and Discord server into one. BridgeCord comes with the app.
 - Sharing a computer: everyone gets their own sign-ins and their own BelleCord, one click to swap.
 - A tutorial, and a tour for every big update.
@@ -42,9 +40,6 @@ More in `READ ME FIRST.txt`.
 Made by me, Belle ([preferabelle](https://github.com/preferabelle)).
 
 Dialogue, Theme studio and animations were completely made with AI, as well as the integration of making BelleCord an app anyone can use.
-
-AI was also used to generate the images in the games (Mini golf, Tanks and Crazy 8s). Those games are switched off
-for now while I refine them. Chess is still on.
 
 The bridge bot, BridgeCord, is built on Fluxcord by Jb Carreon, used under the MIT License.
 
