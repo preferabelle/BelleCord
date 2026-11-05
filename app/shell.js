@@ -252,6 +252,7 @@
 
   // data from the sites: inbox, voice, people, today
   const people = new Map(); // side:id -> {name, status, avatar, side, at}
+  const dmSeen = { fluxer: new Map(), discord: new Map() }, dmFirstRead = { fluxer: false, discord: false }; // unread DMs last time (inbox)
   const seenMsg = new Set(P("todaySeen") || []);
   const snowTime = (id) => { try { return Number((BigInt(id) >> 22n) + 1420070400000n); } catch { return 0; } };
   const dayKey = (t) => { const d = new Date(t); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); };
@@ -263,9 +264,29 @@
     for (const n of e.detail.notes || []) { // site notification
       const key = side + ":n:" + (n.url || n.title + n.body + n.at);
       if (has(key)) continue;
+      // (a DM that already has its line below gets the message itself instead of a second line)
+      const dm = inbox.find((x) => x.kind === "dm" && x.side === side && now - x.at < 120000 && String(x.title).toLowerCase() === String(n.title || "").toLowerCase());
+      if (dm) { dm.body = n.body || dm.body; dm.nkey = n.key; if (n.url) dm.url = n.url; inboxChanged = true; continue; }
       inbox.unshift({ key, side, kind: "note", nkey: n.key, title: n.title, body: n.body, icon: n.icon || "", url: n.url || "", path: n.path || "", at: n.at || now });
       inboxChanged = true;
     }
+    // unread DMs (the bubbles at the top of the server list): one line per person, moved to the top when more come in.
+    // Before, a DM only reached the inbox if the site showed a notification for it, so most of them never did.
+    const before = dmSeen[side], nowSeen = new Map();
+    for (const d of st.dmList || []) {
+      if (!d || !(d.id || d.name)) continue;
+      const k = side + ":dm:" + (d.id || d.name);
+      nowSeen.set(k, d.n);
+      const was = before.get(k) || 0, at = inbox.findIndex((x) => x.key === k);
+      if (d.n <= was) continue;
+      if (!was && at >= 0 && (inbox[at].n || 0) >= d.n && !dmFirstRead[side]) continue; // (the same unread one as before the app restarted)
+      const note = inbox.find((x) => x.kind === "note" && x.side === side && now - x.at < 120000 && String(x.title).toLowerCase() === String(d.name).toLowerCase());
+      const old = at >= 0 ? inbox.splice(at, 1)[0] : null;
+      inbox.unshift({ key: k, side, kind: "dm", n: d.n, title: d.name || "Someone", body: note ? note.body : d.n === 1 ? "Sent you a DM" : "Sent you " + d.n + " DMs", icon: d.icon || (old && old.icon) || "", path: d.id ? "/channels/@me/" + d.id : "", dmName: d.name, where: "DM", at: now });
+      if (note) inbox.splice(inbox.indexOf(note), 1);
+      inboxChanged = true;
+    }
+    dmSeen[side] = nowSeen; dmFirstRead[side] = true;
     for (const m of st.msgs || []) {
       const t = snowTime(m.id);
       if (m.mention && !m.self && now - t < 864e5) { // mention or reply
@@ -346,6 +367,7 @@
     if (x.url) { try { ok = await R.act(x.side, "path", new URL(x.url, "https://x").pathname); } catch {} }
     if (!ok && x.nkey) ok = await R.act(x.side, "note", x.nkey);
     if (!ok && x.path && /^\/channels\//.test(x.path)) ok = await R.act(x.side, "path", x.path);
+    if (!ok && x.kind === "dm" && x.dmName) ok = await R.act(x.side, "dmname", x.dmName);
     setTimeout(() => R.read(x.side), 400);
   }
   $("inbox-clear").onclick = () => { prefs.inbox = []; save({ inbox: [] }); paintDash(true); };

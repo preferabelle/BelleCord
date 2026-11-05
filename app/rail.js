@@ -9,7 +9,7 @@
     var bgUrl = function (el) { if (!el) return null; var s = el.style && el.style.backgroundImage || getComputedStyle(el).backgroundImage || ""; var m = s.match(/url\(["']?([^"')]+)["']?\)/); return m ? m[1] : null; };
     var num = function (t) { t = String(t || "").trim(); return /^\d{1,4}\+?$/.test(t) ? parseInt(t, 10) : 0; };
     var mentionsIn = function (label) { var m = String(label || "").match(/(\d+)\s+(unread\s+)?mentions?/i); return m ? +m[1] : 0; };
-    var out = { ok: false, path: location.pathname, servers: [], dms: 0, voice: [], people: [], msgs: [], title: document.title };
+    var out = { ok: false, path: location.pathname, servers: [], dms: 0, dmList: [], voice: [], people: [], msgs: [], title: document.title };
     var col = document.querySelector('[data-flx="app.guilds-layout.guild-list.guild-list-scroller-wrapper"]');
     if (col) {
       out.ok = true;
@@ -39,7 +39,17 @@
         }
       }
       var dmItems = col.querySelectorAll('[data-flx="app.sidebar-nav.guild-list-dm-item.dm-list-item.button.select"]');
-      for (var d = 0; d < dmItems.length; d++) out.dms += Math.max(1, mentionsIn(dmItems[d].getAttribute("aria-label")));
+      for (var d = 0; d < dmItems.length; d++) {
+        var dl = dmItems[d].getAttribute("aria-label") || "", dn = Math.max(1, mentionsIn(dl));
+        out.dms += dn;
+        // who it's from (for the inbox): the name in the label, their picture, and the DM's id when the page has it
+        var dimg = dmItems[d].querySelector("img"), dho = dmItems[d].closest("[data-channel-id]") || dmItems[d].querySelector("[data-channel-id]");
+        var did = dmItems[d].getAttribute("data-channel-id") || (dho && dho.getAttribute("data-channel-id")) || "";
+        var dln = dmItems[d].closest("a[href]") || dmItems[d].querySelector("a[href]"), dhm = dln && String(dln.getAttribute("href")).match(/\/channels\/@me\/(\d+)/);
+        if (!did && dhm) did = dhm[1];
+        var dname = dl.replace(/^\s*\d+\s+(unread\s+)?(mentions?|messages?)\s*,\s*/i, "").split(",")[0].trim();
+        out.dmList.push({ id: did, name: dname, icon: dimg ? dimg.currentSrc || dimg.src : bgUrl(dmItems[d].querySelector('[style*="background-image"]')), n: dn });
+      }
     }
     // current guild: name, voice channels, members in voice
     var gm = location.pathname.match(/^\/channels\/(\d+)/), gid = gm ? gm[1] : null;
@@ -96,7 +106,7 @@
     var q = function (root, name) { return root.querySelector('[class^="' + name + '_"],[class*=" ' + name + '_"]'); };
     var qa = function (root, name) { return root.querySelectorAll('[class^="' + name + '_"],[class*=" ' + name + '_"]'); };
     var num = function (t) { t = String(t || "").trim(); return /^\d{1,4}\+?$/.test(t) ? parseInt(t, 10) : 0; };
-    var out = { ok: false, path: location.pathname, servers: [], dms: 0, voice: [], people: [], msgs: [], title: document.title };
+    var out = { ok: false, path: location.pathname, servers: [], dms: 0, dmList: [], voice: [], people: [], msgs: [], title: document.title };
     var nav = document.querySelector('nav[aria-label="Servers sidebar"]') || q(document, "guilds");
     if (nav) {
       out.ok = true;
@@ -117,7 +127,11 @@
         }
         if (!/^\d{5,25}$/.test(key) || seen[key]) continue;
         var beforeSep = sep && (sep.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
-        if (beforeSep || (src && /\/(avatars|channel-icons)\//.test(src))) { out.dms += m || 1; continue; } // unread DM bubble
+        if (beforeSep || (src && /\/(avatars|channel-icons)\//.test(src))) { // unread DM bubble
+          out.dms += m || 1;
+          out.dmList.push({ id: key, name: label.replace(/^\d+\s+(unread\s+)?mentions?,\s*/i, "").replace(/,.*$/, "").trim(), icon: src, n: m || 1 });
+          continue;
+        }
         seen[key] = 1;
         var pill = li && li.querySelector('[class^="pill_"] [class^="item_"],[class*=" pill_"] [class*=" item_"],[class^="pill_"] span,[class*=" pill_"] span');
         var ph = pill ? parseFloat(pill.style.height || getComputedStyle(pill).height) || 0 : 0;
@@ -224,6 +238,7 @@
     if (side === "fluxer") {
       var col = document.querySelector('[data-flx="app.guilds-layout.guild-list.guild-list-scroller-wrapper"]');
       if (what === "dm") return go("/channels/@me");
+      if (what === "dmname") { var dli = col ? col.querySelectorAll('[data-flx="app.sidebar-nav.guild-list-dm-item.dm-list-item.button.select"]') : []; for (var k = 0; k < dli.length; k++) if ((dli[k].getAttribute("aria-label") || "").indexOf(arg) >= 0) return tap(dli[k]); return go("/channels/@me"); }
       if (what === "add") { var ab = document.querySelector('[data-flx="app.sidebar-nav.add-guild-button.button.add-guild"]') || document.querySelector('[data-flx*="add-guild"]'); if (ab) return tap(ab); return 0; }
       if (what === "g") { var g = col && col.querySelector('[data-guild-id="' + arg + '"]'); if (g) return tap(g); return go("/channels/" + arg); }
       if (what === "f") { var fs = col ? col.querySelectorAll('[data-flx="app.sidebar-nav.guild-folder-item.folder-header.toggle-expanded"]') : []; var fe = fs[parseInt(String(arg).split(":")[1], 10) - 1]; if (fe) return toggle(fe); return 0; }
@@ -244,7 +259,7 @@
   const { esc } = window.bcUtil;
   const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 3).map((w) => w[0]).join("").slice(0, 3);
   const FOLDER_SVG = '<svg class="fold" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.1c.6 0 1.2.3 1.6.7L12.6 6H18.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11Z"/></svg>';
-  const blank = () => ({ items: [], path: "", dms: 0, sig: "", voice: [], people: [], msgs: [], guild: null, channel: "", ok: false });
+  const blank = () => ({ items: [], path: "", dms: 0, dmList: [], sig: "", voice: [], people: [], msgs: [], guild: null, channel: "", ok: false });
   const state = { fluxer: blank(), discord: blank() };
 
   function itemEl(side, it) {
@@ -311,7 +326,7 @@
     const items = Array.isArray(r.servers) ? r.servers : [];
     const sig = JSON.stringify([items, r.path, r.dms]);
     const st = state[side];
-    Object.assign(st, { path: r.path || "", dms: r.dms || 0, voice: r.voice || [], people: r.people || [], msgs: r.msgs || [], guild: r.guild || null, channel: r.channel || "", ok: !!r.ok, title: r.title || "", me: r.me || st.me || null });
+    Object.assign(st, { path: r.path || "", dms: r.dms || 0, dmList: Array.isArray(r.dmList) ? r.dmList : [], voice: r.voice || [], people: r.people || [], msgs: r.msgs || [], guild: r.guild || null, channel: r.channel || "", ok: !!r.ok, title: r.title || "", me: r.me || st.me || null });
     if (sig !== st.sig) { st.sig = sig; st.items = items; draw(side); }
     window.dispatchEvent(new CustomEvent("bc-read", { detail: { side, notes } }));
   }

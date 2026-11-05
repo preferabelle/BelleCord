@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld("bcApp", {
   getImg: (key) => ipcRenderer.invoke("img:get", key),
   setImg: (key, data) => ipcRenderer.invoke("img:set", key, data),
   setPrefs: (changes) => ipcRenderer.invoke("prefs:set", changes),
+  noiseSet: (level) => ipcRenderer.invoke("noise:set", String(level || "")),
+  // streams across the bridge (bridgestream.js)
+  share: {
+    arm: (sourceId) => ipcRenderer.invoke("share:arm", String(sourceId || "")),
+    onShare: (fn) => { ipcRenderer.on("bc-share", (e, d) => { try { fn(d); } catch (x) {} }); },
+    onState: (fn) => { ipcRenderer.on("bc-share-state", (e, d) => { try { fn(String(d || "")); } catch (x) {} }); },
+  },
   notify: (title, body) => ipcRenderer.invoke("notify", { title, body }),
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
   hub: (method, route, payload) => ipcRenderer.invoke("hub", method, route, payload),

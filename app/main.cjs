@@ -63,6 +63,17 @@ function writePrefs(changes) {
   return prefs;
 }
 ipcMain.handle("prefs:get", () => readPrefs());
+// noise suppression in the Fluxer and Discord pages (noise-main.cjs, noise-core.js); the level is in prefs
+let noise = null;
+try {
+  noise = require("./noise-main.cjs")({
+    ipcMain, webContents,
+    getLevel: () => readPrefs().noiseLevel,
+    setLevel: (l) => writePrefs({ noiseLevel: l }),
+    allowed: (wc) => { const b = baseOfSession(wc.session); return b === "fluxer" || b === "discord"; },
+  });
+} catch (e) { console.log("[BelleCord] Noise suppression didn't load: " + e.message); }
+ipcMain.handle("noise:set", (e, l) => (noise ? noise.set(String(l)) : "off"));
 // perf settings; gpu switch has to be read before ready
 try { if (readPrefs().noGpu) app.disableHardwareAcceleration(); } catch {}
 const partOfWc = (wc) => { try { const b = baseOfSession(wc.session); if (b === "fluxer" || b === "discord") return b; if (PANEL_BASES.includes(b)) return "links"; } catch {} return "app"; };
@@ -237,10 +248,22 @@ function setUp(ses) {
   ses.setPermissionCheckHandler((wc, perm) => ALLOWED.has(perm));
   ses.setDisplayMediaRequestHandler(async (req, answer) => {
     try {
+      // (BelleCord's own page, showing your Discord stream on Fluxer too (bridgestream.js): the same screen or window
+      //  you just picked for Discord, without asking again)
+      const fromShell = (() => { try { const f = req.frame, m = win && !win.isDestroyed() ? win.webContents.mainFrame : null; return !!(f && m && f.processId === m.processId && f.routingId === m.routingId); } catch { return false; } })();
+      if (armedShare && fromShell && Date.now() - armedShare.at < 20000) {
+        const want = armedShare.id;
+        armedShare = null;
+        const all = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 0, height: 0 } });
+        const same = all.find((x) => x.id === want);
+        return same ? answer({ video: same }) : answer({});
+      }
       const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true });
       const chosen = await pickSource(sources);
       if (!chosen) return answer({});
       answer({ video: chosen, ...(process.platform === "win32" ? { audio: "loopback" } : {}) });
+      // (going live on Discord: BelleCord can show it on Fluxer too, bridgestream.js)
+      if (baseOfSession(ses) === "discord") { try { if (win && !win.isDestroyed()) win.webContents.send("bc-share", { side: "discord", sourceId: chosen.id, name: chosen.name }); } catch {} }
     } catch { answer({}); }
   });
   // google blocks sign-in from embedded browsers but allows firefox; firefox UA on google auth pages only
@@ -267,6 +290,10 @@ function setUp(ses) {
   }
 }
 function tellShell(what) { try { if (win && !win.isDestroyed()) win.webContents.send("notice", what); } catch {} }
+// streams across the bridge (bridgestream.js): the screen the shell may capture next, and when Discord's stream ends
+let armedShare = null;
+ipcMain.handle("share:arm", (e, id) => { if (win && e.sender === win.webContents && /^(screen|window):[\w:-]+$/.test(String(id || ""))) armedShare = { id: String(id), at: Date.now() }; return !!armedShare; });
+ipcMain.on("bc-share-state", (e, what) => { try { if (baseOfSession(e.sender.session) === "discord" && win && !win.isDestroyed()) win.webContents.send("bc-share-state", String(what || "").slice(0, 20)); } catch {} });
 
 function pickSource(sources) {
   return new Promise((resolve) => {
@@ -407,6 +434,7 @@ function setUpPart(part) {
   const ses = session.fromPartition(part);
   SES_BASE.set(ses, pp.base);
   setUp(ses);
+  if (noise && (pp.base === "fluxer" || pp.base === "discord")) noise.setUpSession(ses);
   try { if (pp.base === "fluxer" || pp.base === "discord") ses.setSpellCheckerEnabled(!readPrefs().noSpell); } catch {}
 }
 // profile switching

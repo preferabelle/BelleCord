@@ -9,15 +9,23 @@ themes, skins, game badges and a bridge bot you can run yourself.
 
 - Both apps in one window: Fluxer servers on the left, Discord on the right, or everything in one list. Switch
   sides with Ctrl+1 / Ctrl+2, or see both at once.
-- The dashboard: what's new, your inbox from both sides, voice channels with people in them, countdowns, quick
-  links, and more. Organize it however you want.
+- The dashboard: what's new, your inbox from both sides (mentions, replies and unread DMs), voice channels with
+  people in them, countdowns, quick links, and more. Organize it however you want.
 - Theme studio: colors, backgrounds (a lot of them move), fonts, cursors and effects, plus ready-made themes for
   games, anime, my book Soulbound, and moods.
 - Skin studio: a different look on each side, with your own picture, banner and wallpaper.
 - Game badges: Overwatch, Minecraft, Roblox, chess and more, next to your name for everyone with BelleCord.
+- Noise suppression: my own, on Fluxer and Discord. DeepFilterNet runs on your PC and takes keyboard clicks, fans,
+  dogs and background talking out of your mic in calls (Max, Balanced or Off).
+- Streams across my bridge: in my bridged call, Discord screen shares show on Fluxer and Fluxer streams can be
+  watched in a small window.
+- Games: chess with friends on Fluxer and Discord from the Games button. Mini golf, Tanks and Crazy 8s are switched
+  off for now while I refine them.
 - Your bridge bot: join your own Fluxer community and Discord server into one. BridgeCord comes with the app.
 - Sharing a computer: everyone gets their own sign-ins and their own BelleCord, one click to swap.
 - A tutorial, and a tour for every big update.
+- Works with a keyboard and a screen reader: focus you can see, buttons that say what they do, and less motion
+  when your computer asks for it.
 
 ## Getting it
 
@@ -35,7 +43,14 @@ Made by me, Belle ([preferabelle](https://github.com/preferabelle)).
 
 Dialogue, Theme studio and animations were completely made with AI, as well as the integration of making BelleCord an app anyone can use.
 
+AI was also used to generate the images in the games (Mini golf, Tanks and Crazy 8s). Those games are switched off
+for now while I refine them. Chess is still on.
+
 The bridge bot, BridgeCord, is built on Fluxcord by Jb Carreon, used under the MIT License.
+
+Noise suppression uses DeepFilterNet 3 by Hendrik Schroeter (MIT or Apache 2.0), in the web build made by MezonAI.
+Streams use livekit-client by LiveKit (Apache 2.0). Their licenses are in `app/noise/` and
+`app/livekit-client.LICENSE.txt`.
 
 ## License
 
