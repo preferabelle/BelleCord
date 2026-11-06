@@ -15,9 +15,10 @@ themes, skins, game badges and a bridge bot you can run yourself.
   games, anime, my book Soulbound, and moods.
 - Skin studio: a different look on each side, with your own picture, banner and wallpaper.
 - Game badges: Overwatch, Minecraft, Roblox, chess and more, next to your name for everyone with BelleCord.
-- Noise suppression: my own, on Fluxer and Discord.
+- Noise suppression: my own, on Fluxer (the 🎙 button at the top).
 - Streams between Fluxer and Discord in a bridged call: going live on Discord can show on Fluxer too (the share box
-  asks), and Fluxer streams get a Watch button under Discord's call buttons. You can set it up on your own bridge too.
+  asks), and Fluxer streams get a Watch button under Discord's call buttons. You can set it up on your own bridge too:
+  BridgeCord does it by itself, and friends on other computers get their own link with `b!stream`.
 - Chess with friends on Fluxer and Discord.
 - Your bridge bot: join your own Fluxer community and Discord server into one. BridgeCord comes with the app.
 - Sharing a computer: everyone gets their own sign-ins and their own BelleCord, one click to swap.

@@ -156,6 +156,8 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
     try {
       lines = []; claim = null; invites = {};
       if (!installed()) { phase = "installing"; await install(); }
+      // (an update of BelleCord brought a newer BridgeCord along: it's put in before starting, settings and data kept)
+      else if (bundled() && tagNum(bundled().tag) > tagNum(readMine().tag)) { phase = "installing"; await install(); }
       const t = tokens();
       if (!t.fluxer || !t.discord) { phase = "off"; note = "Paste both bot tokens first."; return status(); }
       const node = await findNode();
@@ -222,6 +224,24 @@ module.exports = function startBridgeBot({ app, ipcMain, net, shell }) {
   ipcMain.handle("bridgebot:auto", (e, on) => { saveMine({ auto: !!on }); return status(); });
   ipcMain.handle("bridgebot:folder", () => { fs.mkdirSync(DIR, { recursive: true }); shell.openPath(DIR); return true; });
   ipcMain.handle("bridgebot:node", () => { shell.openExternal("https://nodejs.org/en/download"); nodeCache = null; return true; });
+
+  // streams with BelleCord (BridgeCord's StreamServer.js): it writes the port and a fresh key to data/stream.json at
+  // every start, and listens on this computer only, so BelleCord here can ask it with nothing to set up
+  async function streamCall(body) {
+    let here = null;
+    try { here = JSON.parse(fs.readFileSync(path.join(DIR, "data", "stream.json"), "utf-8")); } catch {}
+    if (!here || !Number.isInteger(here.port) || typeof here.key !== "string") return { ok: false, status: 0, error: "off" };
+    try {
+      const r = await fetch("http://127.0.0.1:" + here.port + "/v1/stream", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, key: here.key }), signal: AbortSignal.timeout(body.op === "open" ? 25000 : 6000) });
+      const data = await r.json().catch(() => ({}));
+      return { ok: r.ok, status: r.status, data, error: r.ok ? null : data.error || "error " + r.status };
+    } catch { return { ok: false, status: 0, error: "off" }; }
+  }
+  ipcMain.handle("bridgebot:stream", (e, body) => {
+    const b = body && typeof body === "object" ? body : {};
+    const pick = { op: String(b.op || ""), discordUserId: String(b.discordUserId || ""), purpose: String(b.purpose || ""), connectionId: String(b.connectionId || ""), identity: String(b.identity || "") };
+    return streamCall(pick);
+  });
 
   // autostart; stop on quit
   app.whenReady().then(() => { if (readMine().auto && installed()) setTimeout(() => start().catch(() => {}), 5000); });

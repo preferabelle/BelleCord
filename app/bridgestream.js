@@ -1,13 +1,15 @@
-// Streams across my bridge. My bot can't carry streams between Fluxer and Discord by itself (Discord doesn't let bots
-// watch or send streams), so BelleCord does it, for anyone in my bridged call who uses BelleCord:
-//  - Go live on Discord, and the same screen shows in the Fluxer call too, as your bridge bot. Everyone on Fluxer can
-//    watch it, BelleCord or not. The box where you pick what to share has the switch ("Also show it on Fluxer").
+// Streams between Fluxer and Discord in a bridged call. A bridge bot can't carry streams by itself (Discord doesn't let
+// bots watch or send streams), so BelleCord does it, for anyone in the bridged call who uses BelleCord:
+//  - Go live on Discord, and the same screen shows in the Fluxer call too, as your mirror (or the bridge's bot).
+//    Everyone on Fluxer can watch it, BelleCord or not. The box where you pick what to share has the switch ("Also
+//    show it on Fluxer").
 //  - Someone streams on Fluxer: a "Watch" button shows up in Discord's own call panel (bottom left, under the call
 //    buttons), and the stream plays in a little window over Discord (drag it around, resize it from the corner,
 //    fullscreen with ⛶).
-// My bot sets it up (it asks Fluxer for a second connection for your bridge bot, through my badge hub, which knows
-// it's really you because you proved your Discord account with Asuka's code). The video itself goes straight between
-// your PC and Fluxer: it never goes through my PC. Dashboard > App has the switches.
+// The bridge's bot sets each one up: it asks Fluxer for one more connection and hands it here. The video itself goes
+// straight between this PC and Fluxer, never through the bridge. Bridges it can ask (sources() below): your own
+// BridgeCord on this computer, a friend's BridgeCord (the link its stream command DMs you), and a bridge behind the
+// badge hub (it knows it's really you from your game badges). Dashboard > App has the switches.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -21,6 +23,17 @@
     const r = await host.hub("POST", "/v1/stream", { key: prefs.hubKey, op, ...extra }).catch(() => null);
     return r || { ok: false, error: "offline" };
   };
+  // (the bridges to ask, in this order; the one whose call you're in sets your streams up)
+  const myDiscordId = () => (prefs.me && prefs.me.discord && prefs.me.discord.id) || "";
+  const links = () => (Array.isArray(prefs.streamLinks) ? prefs.streamLinks : []).filter((l) => l && l.address && l.key);
+  function sources() {
+    const out = [];
+    if (host.bridgeBot && host.bridgeBot.stream && myDiscordId()) out.push({ id: "own", call: (op, extra) => host.bridgeBot.stream({ op, discordUserId: myDiscordId(), ...extra }) });
+    if (host.streamLink) for (const l of links()) out.push({ id: "link:" + l.address, link: l, call: (op, extra) => host.streamLink(l.address, { key: l.key, op, ...extra }) });
+    if (prefs.hubKey && host.hub) out.push({ id: "hub", call: (op, extra) => hub(op, extra) });
+    return out;
+  }
+  const ask = async (src, op, extra = {}) => (src ? (await src.call(op, extra).catch(() => null)) || { ok: false, error: "offline" } : { ok: false, error: "none" });
 
   // ---------------------------------------------------------------- LiveKit (only loaded when it's needed)
   let lk = null;
@@ -124,9 +137,10 @@
   let note = null, noteTimer = 0;
   const say = (text, ms = 7000) => { note = text; clearTimeout(noteTimer); noteTimer = setTimeout(() => { note = null; draw(); }, ms); draw(); };
 
-  let info = null; // { inCall, canStream, hasMirror, channel, streams: [{ identity, name, audio }] }
-  let pub = null;  // { room, track, connectionId, timer }
-  let watch = null; // { room, connectionId, identity, name, timer }
+  let info = null; // { inCall, canStream, as, hasMirror, channel, streams: [{ identity, name, audio }], warn }
+  let active = null; // the bridge whose call you're in: { src, info }
+  let pub = null;  // { room, track, connectionId, src, timer }
+  let watch = null; // { room, connectionId, src, identity, name, timer }
   function draw() {
     const list = [];
     if (pub) list.push({ kind: "pub" });
@@ -150,32 +164,50 @@
   }
 
   // ---------------------------------------------------------------- who's streaming (every 15 seconds)
+  let lastAnswers = [];
   async function refresh() {
     await getPrefs();
-    if (!prefs.hubKey) { info = null; return draw(); }
-    const r = await hub("info");
-    info = r.ok ? r.data : null;
-    try { host.share && host.share.setCall && host.share.setCall({ inCall: !!(info && info.inCall) }); } catch (e) {}
-    // (left the call: everything stops)
-    if (info && !info.inCall) { if (pub) stopPublish(); if (watch) stopWatch(); }
+    const list = sources();
+    const answers = await Promise.all(list.map(async (src) => ({ src, r: await ask(src, "info") })));
+    lastAnswers = answers;
+    const hit = answers.find((a) => a.r.ok && a.r.data && a.r.data.inCall);
+    active = hit ? { src: hit.src, info: hit.r.data } : null;
+    const any = answers.find((a) => a.r.ok && a.r.data);
+    info = hit ? hit.r.data : any ? any.r.data : null;
+    try { host.share && host.share.setCall && host.share.setCall({ inCall: !!active }); } catch (e) {}
+    // (left the call: everything from that bridge stops. A bridge that didn't answer this time isn't "left".)
+    const left = (o) => { const a = o && answers.find((x) => x.src.id === o.src.id); return !!(a && a.r.ok && a.r.data && !a.r.data.inCall); };
+    if (left(pub)) stopPublish();
+    if (left(watch)) stopWatch();
     draw();
   }
   setInterval(() => { if (document.visibilityState === "visible" || pub || watch) refresh(); }, 15000);
   setTimeout(refresh, 5000);
 
-  const keepAlive = (o) => setInterval(async () => {
-    const r = await hub("ping", { connectionId: o.connectionId });
-    if (!r.ok || (r.data && r.data.ok === false)) { if (o === pub) stopPublish("Your Fluxer copy stopped (the bridged call changed)."); if (o === watch) stopWatch("The stream window closed (the bridged call changed)."); }
-  }, 30000);
+  async function checkIn(o) {
+    if (o !== pub && o !== watch) return;
+    const r = await ask(o.src, "ping", { connectionId: o.connectionId });
+    if (!r.ok || (r.data && r.data.ok === false)) { if (o === pub) stopPublish("Your Fluxer copy stopped (the bridged call changed)."); if (o === watch) stopWatch("The stream window closed (the bridged call changed)."); return; }
+    if (o === pub && r.data && r.data.warn === "no-stream-permission" && !o.warned) { o.warned = true; say(NO_STREAM, 15000); }
+  }
+  // (every 30 seconds, and once soon after it starts: that's when Fluxer says whether it shows the stream as live)
+  const keepAlive = (o) => { setTimeout(() => checkIn(o), 6000); return setInterval(() => checkIn(o), 30000); };
+  const NO_STREAM = "Fluxer isn't showing your stream: your mirror (or the bridge's bot) needs the Stream permission in that voice channel.";
 
   // ---------------------------------------------------------------- your Discord stream, on Fluxer too
   async function startPublish(sourceId, asked) {
     await getPrefs();
     if (pub || asked === false || (asked !== true && !on("streamToFluxer"))) return;
-    if (!prefs.hubKey) return;
-    const i = await hub("info");
-    if (!i.ok || !i.data || !i.data.inCall) return; // (not in my bridged call: nothing to do)
-    if (!i.data.canStream) return say(i.data.hasMirror ? "Your bridge bot isn't in the Fluxer call yet, so your stream isn't on Fluxer." : "You don't have a bridge bot on Fluxer yet, so your stream can't show there. Tell me and I'll set one up.");
+    if (!active) await refresh();
+    const src = active && active.src;
+    if (!src) return; // (not in a bridged call: nothing to do)
+    const i = await ask(src, "info");
+    if (!i.ok || !i.data || !i.data.inCall) return;
+    if (!i.data.canStream) {
+      return say(i.data.hasMirror ? "Your mirror isn't in the Fluxer call yet, so your stream isn't on Fluxer."
+        : i.data.as === null ? "The bridge isn't in the Fluxer call right now, so your stream isn't on Fluxer." // (BridgeCord: it would use its own bot)
+        : "You don't have a mirror on Fluxer in this bridge yet, so your stream can't show there. Ask whoever runs the bridge for one.");
+    }
     let ms = null, room = null, opened = null;
     try {
       const L = await loadLk();
@@ -183,21 +215,22 @@
       ms = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
       const track = ms.getVideoTracks()[0];
       if (!track) throw new Error("couldn't capture the same screen");
-      const r = await hub("open", { purpose: "publish" });
-      if (!r.ok) throw new Error((r.data && r.data.error) || r.error || "my bot didn't answer");
+      const r = await ask(src, "open", { purpose: "publish" });
+      if (!r.ok) throw new Error((r.data && r.data.error) || r.error || "the bridge didn't answer");
       opened = r.data;
       room = new L.Room({ dynacast: true });
       await room.connect(opened.url, opened.token, { autoSubscribe: false });
       await room.localParticipant.publishTrack(track, { source: L.Track.Source.ScreenShare, name: "screen", simulcast: false, videoEncoding: { maxBitrate: 3000000, maxFramerate: 30 } });
-      pub = { room, track, stream: ms, connectionId: opened.connectionId };
+      pub = { room, track, stream: ms, connectionId: opened.connectionId, src };
       pub.timer = keepAlive(pub);
+      if (opened.as === "bridge") say("Your stream is on Fluxer too, as the bridge's bot (you don't have a mirror there).", 9000);
       track.addEventListener("ended", () => stopPublish());
       room.on(L.RoomEvent.Disconnected, () => { if (pub && pub.room === room) stopPublish("Your Fluxer copy stopped (Fluxer hung up)."); });
       draw();
     } catch (e) {
       try { ms && ms.getTracks().forEach((t) => t.stop()); } catch (x) {}
       try { room && room.disconnect(); } catch (x) {}
-      if (opened) hub("close", { connectionId: opened.connectionId });
+      if (opened) ask(src, "close", { connectionId: opened.connectionId });
       say("Couldn't show your stream on Fluxer: " + (e && e.message ? e.message : e));
     }
   }
@@ -208,7 +241,7 @@
     clearInterval(p.timer);
     try { p.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
     try { p.room.disconnect(); } catch (e) {}
-    hub("close", { connectionId: p.connectionId });
+    ask(p.src, "close", { connectionId: p.connectionId });
     if (why) say(why); else draw();
   }
   if (host.share) {
@@ -220,8 +253,10 @@
   async function startWatch(identity, name) {
     if (watch) stopWatch();
     const L = await loadLk();
-    const r = await hub("open", { purpose: "watch" });
-    if (!r.ok) throw new Error((r.data && r.data.error) || r.error || "my bot didn't answer");
+    const src = active && active.src;
+    if (!src) throw new Error("you're not in a bridged call");
+    const r = await ask(src, "open", { purpose: "watch", identity });
+    if (!r.ok) throw new Error((r.data && r.data.error) || r.error || "the bridge didn't answer");
     const box = document.createElement("div");
     box.id = "bcbw";
     box.setAttribute("role", "dialog");
@@ -244,7 +279,7 @@
     });
     const room = new L.Room({ adaptiveStream: true, dynacast: false });
     const isScreen = (p) => p && (p.source === L.Track.Source.ScreenShare || p.source === L.Track.Source.ScreenShareAudio);
-    watch = { room, connectionId: r.data.connectionId, identity, name, box };
+    watch = { room, connectionId: r.data.connectionId, src, identity, name, box };
     watch.timer = keepAlive(watch);
     room.on(L.RoomEvent.TrackSubscribed, (track, p, participant) => {
       if (participant.identity !== identity) return;
@@ -272,10 +307,38 @@
     clearInterval(w.timer);
     try { w.room.disconnect(); } catch (e) {}
     try { w.box.remove(); } catch (e) {}
-    hub("close", { connectionId: w.connectionId });
+    ask(w.src, "close", { connectionId: w.connectionId });
     if (why) say(why); else draw();
   }
   addEventListener("beforeunload", () => { stopPublish(); stopWatch(); });
+
+  // ---------------------------------------------------------------- a friend's bridge: the link its stream command DMs you
+  // (clicking it anywhere in BelleCord lands here; the key is after the #, and it only works for your Discord account)
+  async function addLink(url) {
+    let u = null;
+    try { u = new URL(url); } catch (e) { return; }
+    const h = new URLSearchParams(u.hash.slice(1));
+    const key = h.get("k") || "", name = (h.get("n") || "").replace(/[\u0000-\u001f]/g, "").slice(0, 60) || u.hostname;
+    if (!/^[\w-]{20,}$/.test(key)) return;
+    await getPrefs();
+    const list = links().filter((l) => l.address !== u.origin);
+    list.unshift({ address: u.origin, key, name, at: Date.now() });
+    await host.setPrefs?.({ streamLinks: list.slice(0, 8) });
+    await getPrefs();
+    say("Added " + name + " for streams. In its bridged call, your streams can show on Fluxer and Fluxer streams get a Watch button.", 9000);
+    refresh();
+    card();
+  }
+  async function removeLink(address) {
+    await getPrefs();
+    await host.setPrefs?.({ streamLinks: links().filter((l) => l.address !== address) });
+    await getPrefs();
+    if (pub && pub.src.id === "link:" + address) stopPublish();
+    if (watch && watch.src.id === "link:" + address) stopWatch();
+    refresh();
+    card();
+  }
+  if (host.onNotice) host.onNotice((what) => { if (String(what).startsWith("streamlink:")) addLink(String(what).slice(11)); });
 
   // ---------------------------------------------------------------- Dashboard > App: the switches
   function card() {
@@ -287,14 +350,24 @@
       box.className = "card"; box.id = "bscard";
       ($("noisecard") || $("volcard") || app).after(box);
     }
-    const verified = !!prefs.hubKey;
-    box.innerHTML = '<h3>Streams across my bridge</h3><p class="dim small">In my bridged call, streams cross between Fluxer and Discord for everyone who uses BelleCord. The video goes straight between you and Fluxer.</p>' +
+    const own = lastAnswers.find((a) => a.src.id === "own");
+    const ownOn = !!(own && own.r.ok);
+    const linkRows = links().map((l) => {
+      const a = lastAnswers.find((x) => x.src.id === "link:" + l.address);
+      const st = !a ? "" : a.r.status === 401 ? "this link doesn't work any more, ask its bridge for a new one" : a.r.ok ? (a.r.data && a.r.data.inCall ? "you're in its call" : "ready") : "not answering right now";
+      return '<div class="keep" style="display:flex;gap:8px;align-items:center;margin:4px 0"><span style="flex:1;min-width:0">' + esc(l.name || l.address) + (st ? ' <span class="dim small">(' + esc(st) + ")</span>" : "") + '</span><button data-rm="' + esc(l.address) + '" aria-label="Remove ' + esc(l.name || l.address) + '">Remove</button></div>';
+    }).join("");
+    const where = active && active.info;
+    box.innerHTML = '<h3>Streams between Fluxer and Discord</h3><p class="dim small">In a bridged call, streams cross between Fluxer and Discord for everyone who uses BelleCord. The video goes straight between you and Fluxer.</p>' +
       '<label class="keep"><input type="checkbox" id="bs-pub"' + (on("streamToFluxer") ? " checked" : "") + "> When I go live on Discord, show it on Fluxer too (the share box asks each time, with this as the answer it starts on)</label><br>" +
       '<label class="keep"><input type="checkbox" id="bs-watch"' + (on("watchFluxer") ? " checked" : "") + "> Offer Fluxer streams to watch while I'm on Discord</label>" +
-      (verified ? "" : '<p class="dim small">This needs your Discord account proven once: set up your game badges (it sends you a code from Asuka).</p>') +
-      (info ? '<p class="dim small" role="status">' + (info.inCall ? "You're in the bridged call" + (info.channel ? " (" + esc(info.channel) + ")" : "") + (info.canStream ? "." : ", but your bridge bot isn't in the Fluxer call yet.") : "You're not in the bridged call right now.") + "</p>" : "");
+      '<p class="dim small">Your own bridge (Your bridge bot) does it by itself' + (ownOn ? ", and it's running." : " while it's running.") +
+      " A friend's BridgeCord sends you a link when you type its stream command on Discord (b!stream, unless they changed the b!). Click it here and it's added.</p>" +
+      (linkRows ? '<div role="list" aria-label="Friends\' bridges">' + linkRows + "</div>" : "") +
+      '<p class="dim small" role="status">' + (where ? "You're in a bridged call" + (where.channel ? " (" + esc(where.channel) + ")" : "") + (where.canStream ? "." : where.hasMirror ? ", but your mirror isn't in the Fluxer call yet." : ".") + (where.warn === "no-stream-permission" ? " " + esc(NO_STREAM) : "") : "You're not in a bridged call right now.") + "</p>";
     box.querySelector("#bs-pub").onchange = async (e) => { await host.setPrefs?.({ streamToFluxer: e.target.checked }); await getPrefs(); if (!e.target.checked) stopPublish(); };
     box.querySelector("#bs-watch").onchange = async (e) => { await host.setPrefs?.({ watchFluxer: e.target.checked }); await getPrefs(); draw(); };
+    box.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => removeLink(b.getAttribute("data-rm"))));
   }
   setInterval(() => { if (document.querySelector(".appcard") && !document.activeElement?.closest?.("#bscard")) card(); }, 4000);
 })();

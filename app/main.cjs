@@ -63,14 +63,15 @@ function writePrefs(changes) {
   return prefs;
 }
 ipcMain.handle("prefs:get", () => readPrefs());
-// noise suppression in the Fluxer and Discord pages (noise-main.cjs, noise-core.js); the level is in prefs
+// noise suppression in the Fluxer pages (noise-main.cjs, noise-core.js); the level is in prefs. Discord keeps its own
+// (its Krisp is good), so BelleCord's never touches the Discord side.
 let noise = null;
 try {
   noise = require("./noise-main.cjs")({
     ipcMain, webContents,
     getLevel: () => readPrefs().noiseLevel,
     setLevel: (l) => writePrefs({ noiseLevel: l }),
-    allowed: (wc) => { const b = baseOfSession(wc.session); return b === "fluxer" || b === "discord"; },
+    allowed: (wc) => baseOfSession(wc.session) === "fluxer",
   });
 } catch (e) { console.log("[BelleCord] Noise suppression didn't load: " + e.message); }
 ipcMain.handle("noise:set", (e, l) => (noise ? noise.set(String(l)) : "off"));
@@ -220,6 +221,22 @@ ipcMain.handle("hub", async (e, method, route, payload) => {
     return { ok: r.ok, status: r.status, data, error: r.ok ? null : data.error || "hub error " + r.status };
   } catch { return { ok: false, status: 0, error: "offline" }; }
 });
+// streams through a friend's bridge (BridgeCord's stream command DMs a link: the bridge's address, and their key after
+// the #). Clicking it anywhere in BelleCord hands it to bridgestream.js, which keeps it; asking goes through here.
+const okBridgeAddress = (a) => /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(a) || /^http:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/i.test(a);
+function isStreamLink(url) {
+  try { const u = new URL(String(url || "")); return okBridgeAddress(u.origin) && u.pathname === "/bellecord/link" && /(^#|&)k=[\w-]{20,}/.test(u.hash); } catch { return false; }
+}
+ipcMain.handle("streamlink:call", async (e, address, body) => {
+  if (!win || e.sender !== win.webContents) return { ok: false, status: 0, error: "no" };
+  const base = String(address || "").replace(/\/+$/, "");
+  if (!okBridgeAddress(base)) return { ok: false, status: 400, error: "bad address" };
+  try {
+    const r = await fetch(base + "/v1/stream", { method: "POST", headers: { "content-type": "application/json", "ngrok-skip-browser-warning": "1", "user-agent": "BelleCord" }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(body && body.op === "open" ? 25000 : 8000) });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data, error: r.ok ? null : data.error || "error " + r.status };
+  } catch { return { ok: false, status: 0, error: "offline" }; }
+});
 // titlebar overlay follows the theme
 ipcMain.handle("titlebar", (e, c) => {
   const hex = (v) => /^#[0-9a-f]{6}$/i.test(String(v || ""));
@@ -259,7 +276,7 @@ function setUp(ses) {
         return same ? answer({ video: same }) : answer({});
       }
       const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true });
-      // (going live on Discord while you're in my bridged call: the box also asks whether it should show on Fluxer
+      // (going live on Discord while you're in a bridged call: the box also asks whether it should show on Fluxer
       //  too, right where you pick what to share)
       const forDiscord = baseOfSession(ses) === "discord";
       const offer = forDiscord && bridgeCall.inCall && Date.now() - bridgeCall.at < 45000;
@@ -298,7 +315,7 @@ function setUp(ses) {
 function tellShell(what) { try { if (win && !win.isDestroyed()) win.webContents.send("notice", what); } catch {} }
 // streams across the bridge (bridgestream.js): the screen the shell may capture next, and when Discord's stream ends
 let armedShare = null;
-// (bridgestream.js says whether you're in my bridged call, so the share box knows to offer Fluxer)
+// (bridgestream.js says whether you're in a bridged call, so the share box knows to offer Fluxer)
 let bridgeCall = { inCall: false, at: 0 };
 ipcMain.on("bc-bridge-call", (e, d) => { if (win && e.sender === win.webContents) bridgeCall = { inCall: !!(d && d.inCall), at: Date.now() }; });
 ipcMain.handle("share:arm", (e, id) => { if (win && e.sender === win.webContents && /^(screen|window):[\w:-]+$/.test(String(id || ""))) armedShare = { id: String(id), at: Date.now() }; return !!armedShare; });
@@ -325,7 +342,7 @@ function pickSource(sources, opts = null) {
       .t img{width:100%;border-radius:4px;display:block;background:#000}.t b{display:block;margin-top:6px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .r{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:14px}button{background:#4e5058;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}
       .fx{flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#dbdee1;cursor:pointer;background:#2b2d31;border-radius:8px;padding:8px 10px}.fx small{color:#949ba4}.fx input{width:16px;height:16px;accent-color:#5865f2;margin:0;flex:none}
-      </style><h2>Share your screen</h2><div class="g">${tiles}</div><div class="r">${opts ? `<label class="fx"><input type="checkbox" id="fx"${opts.toFluxer ? " checked" : ""}><span>Also show it on Fluxer <small>(in my bridged call, so the people on Fluxer can watch too)</small></span></label>` : ""}<button id="x">Cancel</button></div>
+      </style><h2>Share your screen</h2><div class="g">${tiles}</div><div class="r">${opts ? `<label class="fx"><input type="checkbox" id="fx"${opts.toFluxer ? " checked" : ""}><span>Also show it on Fluxer <small>(in the bridged call, so the people on Fluxer can watch too)</small></span></label>` : ""}<button id="x">Cancel</button></div>
       <script>const { ipcRenderer } = require("electron");
       const fx = document.getElementById("fx");
       document.querySelectorAll(".t").forEach((t) => (t.onclick = () => ipcRenderer.send("bc-pick", t.dataset.id, fx ? { toFluxer: fx.checked } : null)));
@@ -387,6 +404,7 @@ app.on("web-contents-created", (e, wc) => {
   const inPanel = () => { try { return PANEL_BASES.includes(baseOfSession(wc.session)); } catch { return false; } };
   const inPinterest = () => { try { return baseOfSession(wc.session) === "pinterest"; } catch { return false; } };
   wc.setWindowOpenHandler(({ url }) => {
+    if (isStreamLink(url)) { tellShell("streamlink:" + url); return { action: "deny" }; } // a friend's bridge, for streams
     if (isChessLink(url)) { tellShell("chess:" + url); return { action: "deny" }; } // chess links open in the Chess side panel
     if (isGoogleSignIn(url) && inPinterest()) { tellShell("pinterest-google"); return { action: "deny" }; }
     if (STAYS_IN.test(url) || isGoogleSignIn(url) || (inPanel() && /^https:\/\//i.test(url) && sameSite(wc, url))) return { action: "allow", overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, backgroundColor: "#313338", ...withIcon() } };
@@ -394,7 +412,7 @@ app.on("web-contents-created", (e, wc) => {
     return { action: "deny" };
   });
   // off-site navigation opens externally
-  wc.on("will-navigate", (ev, url) => { if (!inPanel() && isChessLink(url)) { ev.preventDefault(); tellShell("chess:" + url); return; } if (isGoogleSignIn(url) && inPinterest()) { ev.preventDefault(); tellShell("pinterest-google"); return; } if (inPanel()) return; if (!STAYS_IN.test(url) && /^https?:\/\//i.test(url)) { ev.preventDefault(); shell.openExternal(url); } });
+  wc.on("will-navigate", (ev, url) => { if (isStreamLink(url)) { ev.preventDefault(); tellShell("streamlink:" + url); return; } if (!inPanel() && isChessLink(url)) { ev.preventDefault(); tellShell("chess:" + url); return; } if (isGoogleSignIn(url) && inPinterest()) { ev.preventDefault(); tellShell("pinterest-google"); return; } if (inPanel()) return; if (!STAYS_IN.test(url) && /^https?:\/\//i.test(url)) { ev.preventDefault(); shell.openExternal(url); } });
 });
 
 function open() {
@@ -445,7 +463,7 @@ function setUpPart(part) {
   const ses = session.fromPartition(part);
   SES_BASE.set(ses, pp.base);
   setUp(ses);
-  if (noise && (pp.base === "fluxer" || pp.base === "discord")) noise.setUpSession(ses);
+  if (noise && pp.base === "fluxer") noise.setUpSession(ses);
   try { if (pp.base === "fluxer" || pp.base === "discord") ses.setSpellCheckerEnabled(!readPrefs().noSpell); } catch {}
 }
 // profile switching

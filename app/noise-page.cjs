@@ -1,7 +1,9 @@
-// Runs first in the Fluxer and Discord pages (before their own code): gives noise-core.js the filter files and the
+// Runs first in the Fluxer pages (before their own code): gives noise-core.js the filter files and the
 // level you picked, and puts it in the page. On Fluxer it also switches Fluxer's own noise filter off while
 // BelleCord's is on (and puts back whatever you had when you turn BelleCord's off), so the two never stack.
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
+// (Fluxer only: Discord keeps its own noise suppression. An older BelleCord put this in Discord too.)
+const onFluxer = /(^|\.)fluxer\.(app|com)$/i.test(location.hostname);
 
 let level = "max", keepFluxerOff = false;
 try {
@@ -41,7 +43,7 @@ try {
   }
 } catch (e) {}
 
-try {
+if (onFluxer) try {
   contextBridge.exposeInMainWorld("__bcNoiseHost", {
     assets: () => ipcRenderer.invoke("bc-noise-assets"),
     level: () => ipcRenderer.invoke("bc-noise-level"),

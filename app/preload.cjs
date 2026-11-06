@@ -54,7 +54,11 @@ contextBridge.exposeInMainWorld("bcApp", {
     auto: (on) => ipcRenderer.invoke("bridgebot:auto", !!on),
     folder: () => ipcRenderer.invoke("bridgebot:folder"),
     getNode: () => ipcRenderer.invoke("bridgebot:node"),
+    // streams with your own BridgeCord on this computer (bridgestream.js)
+    stream: (body) => ipcRenderer.invoke("bridgebot:stream", body && typeof body === "object" ? body : {}),
   },
+  // streams through a friend's BridgeCord (the link it sent you)
+  streamLink: (address, body) => ipcRenderer.invoke("streamlink:call", String(address || ""), body && typeof body === "object" ? body : {}),
   onFluxerProgress: (fn) => ipcRenderer.on("fluxer-progress", (e, step) => { try { fn(step); } catch (x) {} }),
   setTitleBar: (color, symbol) => ipcRenderer.invoke("titlebar", { color, symbol }),
   onSwitch: (fn) => ipcRenderer.on("switch", (e, n) => fn(n)),
