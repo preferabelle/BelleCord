@@ -212,7 +212,9 @@
     try {
       const L = await loadLk();
       await host.share.arm(sourceId);
-      ms = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+      // (with its sound now: before, Fluxer got the picture only. The app's own sound, like the Discord call, is left out
+      //  where Windows allows it, so people on Fluxer don't hear the call twice.)
+      ms = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: { restrictOwnAudio: true, suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).catch(() => navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false }));
       const track = ms.getVideoTracks()[0];
       if (!track) throw new Error("couldn't capture the same screen");
       const r = await ask(src, "open", { purpose: "publish" });
@@ -221,6 +223,8 @@
       room = new L.Room({ dynacast: true });
       await room.connect(opened.url, opened.token, { autoSubscribe: false });
       await room.localParticipant.publishTrack(track, { source: L.Track.Source.ScreenShare, name: "screen", simulcast: false, videoEncoding: { maxBitrate: 3000000, maxFramerate: 30 } });
+      const sound = ms.getAudioTracks()[0];
+      if (sound) await room.localParticipant.publishTrack(sound, { source: L.Track.Source.ScreenShareAudio, name: "screen-audio", dtx: false, red: false, audioPreset: { maxBitrate: 128000 } }).catch(() => {});
       pub = { room, track, stream: ms, connectionId: opened.connectionId, src };
       pub.timer = keepAlive(pub);
       if (opened.as === "bridge") say("Your stream is on Fluxer too, as the bridge's bot (you don't have a mirror there).", 9000);

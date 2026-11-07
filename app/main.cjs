@@ -273,7 +273,7 @@ function setUp(ses) {
         armedShare = null;
         const all = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 0, height: 0 } });
         const same = all.find((x) => x.id === want);
-        return same ? answer({ video: same }) : answer({});
+        return same ? answer({ video: same, ...(process.platform === "win32" ? { audio: "loopback" } : {}) }) : answer({});
       }
       const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true });
       // (going live on Discord while you're in a bridged call: the box also asks whether it should show on Fluxer
