@@ -165,7 +165,9 @@ ipcMain.handle("notify:click", (e, { title, body, tag }) => {
 const AUTO_OK = process.platform === "win32";
 const autoArgs = () => [path.join(__dirname, ".."), "--hidden"];
 function autoApply(on) { if (!AUTO_OK) return; try { app.setLoginItemSettings({ openAtLogin: !!on, path: process.execPath, args: autoArgs(), name: NAME }); } catch {} }
-const autoOn = () => readPrefs().autoStart !== false;
+// (always on: Windows Settings > Apps > Startup is where it's turned off, like other apps. That switch lives in
+//  Windows' StartupApproved list, which this doesn't touch, so it stays off once someone turns it off there.)
+const autoOn = () => true;
 ipcMain.handle("autostart:get", () => ({ can: AUTO_OK, on: AUTO_OK && autoOn() }));
 ipcMain.handle("autostart:set", (e, on) => { writePrefs({ autoStart: !!on }); autoApply(!!on); return { can: AUTO_OK, on: AUTO_OK && !!on }; });
 // (Update 21) Belle's own profile pictures (decorations, effects, nameplates she uploaded), through the hub

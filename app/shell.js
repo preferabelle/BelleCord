@@ -848,7 +848,7 @@
     window.__bcGB = 1;
     var cache = {}, asked = {};
     var css = document.createElement("style");
-    css.textContent = ".bc-gbrow{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 0 4px;vertical-align:middle}.bc-gbrow button{width:22px;height:22px;border-radius:7px;border:0;padding:0;cursor:pointer;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:900 8.5px/1 'Segoe UI',sans-serif;letter-spacing:-.02em;background-image:linear-gradient(160deg,rgba(255,255,255,.3),rgba(255,255,255,0) 45%,rgba(0,0,0,.28))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 1px 3px rgba(0,0,0,.45);transition:transform .12s}.bc-gbrow button svg{width:14px;height:14px;display:block}.bc-gbrow button:hover{filter:brightness(1.15);transform:translateY(-1px)}";
+    css.textContent = ".bc-gbrow{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;margin:0 0 0 4px;vertical-align:middle}.bc-gbrow button{width:22px;height:22px;border-radius:7px;border:0;padding:0;cursor:pointer;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:900 8.5px/1 'Segoe UI',sans-serif;letter-spacing:-.02em;background-image:linear-gradient(160deg,rgba(255,255,255,.3),rgba(255,255,255,0) 45%,rgba(0,0,0,.28))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 1px 3px rgba(0,0,0,.45);transition:transform .12s}.bc-gbrow button svg{width:14px;height:14px;display:block}.bc-gbrow button:hover{filter:brightness(1.15);transform:translateY(-1px)}.bc-gbrow.under{display:flex;margin:6px 0 2px}";
     (document.head || document.documentElement).appendChild(css);
     var idIn = function (box) {
       if (side === "fluxer") { var a = box.querySelector("[data-flx-user-id]"); if (a) return a.getAttribute("data-flx-user-id"); }
@@ -864,8 +864,10 @@
         els = document.querySelectorAll('[class*="userPopoutOuter_"],[class*="userProfileOuter_"],[class*="userProfileModalOuter_"],[class*="user-profile-popout"],[class*="userPopout_"]');
         for (i = 0; i < els.length; i++) {
           id = idIn(els[i]); if (!id) continue;
-          var at = els[i].querySelector('[class^="badgeList_"],[class*=" badgeList_"]') || els[i].querySelector('[class^="nickname_"],[class*=" nickname_"],h1,h2');
-          if (at) out.push({ el: at, key: "discord:" + id, after: !/badgeList_/.test(at.getAttribute("class") || "") });
+          // (Update 21: under the name, its own line, like Discord's own badges row, not squeezed in with Discord's)
+          var nm = els[i].querySelector('[class^="nickname_"],[class*=" nickname_"],h1,h2');
+          var at = nm ? (nm.closest('[class*="userText_"],[class*="nameTag_"],[class*="userTag_"]') || nm.parentElement || nm) : null;
+          if (at && els[i].contains(at)) out.push({ el: at, key: "discord:" + id, after: true, under: true });
         }
       }
       return out;
@@ -877,7 +879,7 @@
       if (!list || !list.length) { if (row) row.remove(); return; }
       var sig = list.map(function (b) { return b.key; }).join(",") + "|" + a.key;
       if (row && row.getAttribute("data-sig") === sig) return;
-      if (!row) { row = document.createElement("span"); row.className = "bc-gbrow"; if (a.after) a.el.after(row); else a.el.appendChild(row); }
+      if (!row) { row = document.createElement(a.under ? "div" : "span"); row.className = "bc-gbrow" + (a.under ? " under" : ""); if (a.after) a.el.after(row); else a.el.appendChild(row); }
       row.setAttribute("data-sig", sig); row.textContent = "";
       list.forEach(function (b) {
         var x = document.createElement("button"); x.type = "button"; if (b.svg) x.innerHTML = b.svg; else x.textContent = b.glyph; x.title = b.name; x.setAttribute("aria-label", b.name + " profile"); x.style.background = b.color;
@@ -1212,15 +1214,14 @@
 
   // app: tray + updates
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
-  // (Update 21) start with Windows, quietly in the tray (on by default; told once)
+  // (Update 21) BelleCord starts with Windows and waits in the tray, like other apps (it's how a friend's stream can
+  // reach Belle without opening anything). It's turned off the way other apps are: Windows Settings > Apps > Startup.
   if (host.autostart) host.autostart.get().then((a) => {
     if (!a || !a.can) return;
-    const lab = document.createElement("label"); lab.className = "keep";
-    lab.innerHTML = '<input type="checkbox" id="opt-auto"> Start BelleCord with Windows (it waits in the tray)';
-    $("opt-tray").closest("label").after(lab);
-    const box = $("opt-auto"); box.checked = !!a.on;
-    box.onchange = async () => { const r = await host.autostart.set(box.checked).catch(() => null); box.checked = !!(r && r.on); await save({ autoStart: box.checked }); };
-    if (a.on && !P("autoStartTold")) { save({ autoStartTold: true }); setTimeout(() => toast("BelleCord starts with Windows now, quietly in the tray. Turn it off in Dashboard > App.", 7000), 9000); }
+    const note = document.createElement("div"); note.className = "dim small";
+    note.textContent = "BelleCord starts with Windows and waits in the tray. To stop that: Windows Settings > Apps > Startup.";
+    $("opt-tray").closest("label").after(note);
+    if (!P("autoStartTold")) { save({ autoStartTold: true }); setTimeout(() => toast("BelleCord now starts with Windows, quietly in the tray (Windows Settings > Apps > Startup turns it off).", 7000), 9000); }
   }).catch(() => {});
   // (Update 21) the stream bridge proved it's you with one tap: game badges know too, without asking again
   window.addEventListener("bc-hubkey", (e) => { const k = String((e && e.detail) || ""); if (k && !P("hubKey")) { prefs.hubKey = k; try { paintBadges(); } catch (x) {} } });
