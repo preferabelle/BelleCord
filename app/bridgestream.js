@@ -237,7 +237,7 @@
   const NO_STREAM = "Fluxer isn't showing your stream: your mirror (or the bridge's bot) needs the Stream permission in that voice channel.";
 
   // ---------------------------------------------------------------- your Discord stream, on Fluxer too
-  async function startPublish(sourceId, asked) {
+  async function startPublish(sourceId, asked, tries) {
     await getPrefs();
     if (pub || asked === false || (asked !== true && !on("streamToFluxer"))) return;
     if (!active) await refresh();
@@ -246,6 +246,8 @@
     const i = await ask(src, "info");
     if (!i.ok || !i.data || !i.data.inCall) return;
     if (!i.data.canStream) {
+      // (the call may be getting its Fluxer side right now: a few more tries before giving up)
+      if (i.data.hasMirror && (tries || 0) < 5) { setTimeout(() => startPublish(sourceId, asked === undefined ? true : asked, (tries || 0) + 1), 6000); return; }
       return say(i.data.hasMirror ? "Your mirror isn't in the Fluxer call yet, so your stream isn't on Fluxer."
         : i.data.as === null ? "The bridge isn't in the Fluxer call right now, so your stream isn't on Fluxer." // (BridgeCord: it would use its own bot)
         : "You don't have a mirror on Fluxer in this bridge yet, so your stream can't show there. Ask whoever runs the bridge for one.");
