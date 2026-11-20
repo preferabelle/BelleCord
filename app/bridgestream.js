@@ -10,6 +10,10 @@
 // straight between this PC and Fluxer, never through the bridge. Bridges it can ask (sources() below): your own
 // BridgeCord on this computer, a friend's BridgeCord (the link its stream command DMs you), and a bridge behind the
 // badge hub (it knows it's really you from your game badges). Dashboard > App has the switches.
+// (Update 21) No game badges needed any more: when Belle is in your call and you go live (here, or in the real Discord
+// app), a small "Show it to Belle too?" row comes up (and a quiet notification if BelleCord is in the tray). The first
+// time on a second computer, Asuka DMs a "Yes, it's me" button instead (the first BelleCord needs nothing). Your
+// camera works the same way, and cameras on Fluxer get a Watch button too.
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -31,6 +35,11 @@
     if (host.bridgeBot && host.bridgeBot.stream && myDiscordId()) out.push({ id: "own", call: (op, extra) => host.bridgeBot.stream({ op, discordUserId: myDiscordId(), ...extra }) });
     if (host.streamLink) for (const l of links()) out.push({ id: "link:" + l.address, link: l, call: (op, extra) => host.streamLink(l.address, { key: l.key, op, ...extra }) });
     if (prefs.hubKey && host.hub) out.push({ id: "hub", call: (op, extra) => hub(op, extra) });
+    // (not proven yet: the hub still says whether you're in Belle's call, live, and whether she's there, so the
+    //  one-tap proof can be offered right when it's useful)
+    // (no game badges key: the hub knows this BelleCord by its install id, so it just works, no setup. Only an
+    //  older hub, or a second copy of BelleCord on another computer, answers "verify" and gets the one-tap DM.)
+    else if (host.hub && myDiscordId()) out.push({ id: "hub", noSetup: true, call: (op, extra) => host.hub("POST", "/v1/stream", { ids: { discord: myDiscordId() }, install: prefs.installId || "", noSetup: true, op, ...extra }) });
     return out;
   }
   const ask = async (src, op, extra = {}) => (src ? (await src.call(op, extra).catch(() => null)) || { ok: false, error: "offline" } : { ok: false, error: "none" });
@@ -79,7 +88,11 @@
       }
       var html = state.rows.map(function (r) {
         if (r.kind === "pub") return '<div class="r"><i class="dot"></i><span>Your stream is on Fluxer too</span><button class="x" data-a="stoppub">Stop</button></div>';
+        if (r.kind === "campub") return '<div class="r"><i class="dot"></i><span>Your camera is on Fluxer too</span><button class="x" data-a="stopcam">Stop</button></div>';
         if (r.kind === "stream") return '<div class="r"><i class="tag">LIVE</i><span><b>' + esc(r.name) + '</b> on Fluxer</span><button data-a="watch" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>';
+        if (r.kind === "cam") return '<div class="r"><i class="tag" style="background:#5865f2">CAM</i><span><b>' + esc(r.name) + '</b>\'s camera on Fluxer</span><button data-a="watchcam" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>';
+        if (r.kind === "offer") return '<div class="r"><i class="dot"></i><span>' + esc(r.text) + '</span><button data-a="' + esc(r.a) + '">Show it</button><button class="x" data-a="nooffer" title="Not now" aria-label="Not now">✕</button></div>';
+        if (r.kind === "verify") return '<div class="r"><span>Check your Discord DMs: tap <b>Yes, it\'s me (' + esc(r.pin) + ')</b> from Asuka</span><button class="x" data-a="noverify">Cancel</button></div>';
         return '<div class="r note"><span title="' + esc(r.text) + '">' + esc(r.text) + "</span></div>";
       }).join("");
       if (el.__html !== html) { el.innerHTML = html; el.__html = html; }
@@ -107,7 +120,10 @@
       if (!m.startsWith("__bcbr:")) return;
       let o = null; try { o = JSON.parse(m.slice(7)); } catch (x) { return; }
       if (o.a === "stoppub") stopPublish("Stopped showing it on Fluxer.");
+      if (o.a === "stopcam") stopCamera("Your camera is off on Fluxer.");
       if (o.a === "watch" && o.id) startWatch(String(o.id), String(o.n || "Someone")).catch((x) => say("Couldn't open their stream: " + (x && x.message ? x.message : x)));
+      if (o.a === "watchcam" && o.id) startWatch(String(o.id), String(o.n || "Someone"), "camera").catch((x) => say("Couldn't open their camera: " + (x && x.message ? x.message : x)));
+      offerClick(o.a);
     });
     v.addEventListener("dom-ready", () => draw());
   };
@@ -140,26 +156,47 @@
   let info = null; // { inCall, canStream, as, hasMirror, channel, streams: [{ identity, name, audio }], warn }
   let active = null; // the bridge whose call you're in: { src, info }
   let pub = null;  // { room, track, connectionId, src, timer }
-  let watch = null; // { room, connectionId, src, identity, name, timer }
+  let watch = null; // { room, connectionId, src, identity, name, timer, kind }
+  let cam = null;  // your camera on Fluxer too: { room, track, stream, connectionId, src, timer }
+  let offer = null; // { what: "screen"|"camera" } while Belle's in the call and you're live / your camera's on
+  let verifying = null; // { token, pin, at, then }
+  const dismissed = { screen: false, camera: false }; // ("not now": until you stop and start again)
+  const told = { screen: false, camera: false };
   function draw() {
     const list = [];
     if (pub) list.push({ kind: "pub" });
+    if (cam) list.push({ kind: "campub" });
     if (info && info.inCall && on("watchFluxer")) {
       for (const s of (info.streams || []).slice(0, 3)) {
         if (watch && watch.identity === s.identity) continue;
         list.push({ kind: "stream", id: s.identity, name: s.name });
       }
     }
+    if (info && info.inCall && on("watchFluxer")) {
+      for (const c of (info.cameras || []).slice(0, 3)) {
+        if (watch && watch.identity === c.identity && watch.kind === "camera") continue;
+        list.push({ kind: "cam", id: c.identity, name: c.name });
+      }
+    }
+    if (verifying) list.push({ kind: "verify", pin: verifying.pin });
+    else if (offer) list.push({ kind: "offer", a: offer.what === "camera" ? "offercam" : "offer", text: offer.what === "camera" ? "Belle's in this call. Show her your camera too?" : "Belle's in this call. Show her your stream too?" });
     if (note) list.push({ kind: "note", text: note });
     pushRows(list);
     // (the little bar over the window only when Discord's page didn't take it)
     const rows = inPage ? [] : list.map((r) => r.kind === "pub" ? '<div class="row"><span class="live"></span><span class="t">Your Discord stream is on Fluxer too.</span><button class="x" data-a="stoppub">Stop</button></div>'
+      : r.kind === "campub" ? '<div class="row"><span class="live"></span><span class="t">Your camera is on Fluxer too.</span><button class="x" data-a="stopcam">Stop</button></div>'
       : r.kind === "stream" ? '<div class="row"><span class="live"></span><span class="t"><b>' + esc(r.name) + '</b> is streaming on Fluxer</span><button data-a="watch" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>'
+      : r.kind === "cam" ? '<div class="row"><span class="t"><b>' + esc(r.name) + '</b>\'s camera is on, on Fluxer</span><button data-a="watchcam" data-id="' + esc(r.id) + '" data-n="' + esc(r.name) + '">Watch</button></div>'
+      : r.kind === "offer" ? '<div class="row"><span class="live"></span><span class="t">' + esc(r.text) + '</span><button data-a="' + esc(r.a) + '">Show it</button><button class="x" data-a="nooffer" aria-label="Not now">✕</button></div>'
+      : r.kind === "verify" ? '<div class="row"><span class="t">Check your Discord DMs: tap <b>Yes, it\'s me (' + esc(r.pin) + ')</b> from Asuka.</span><button class="x" data-a="noverify">Cancel</button></div>'
       : '<div class="row"><span class="t">' + esc(r.text) + "</span></div>");
     bar.innerHTML = rows.join("");
     bar.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => {
       if (b.dataset.a === "stoppub") stopPublish("Stopped showing it on Fluxer.");
+      if (b.dataset.a === "stopcam") stopCamera("Your camera is off on Fluxer.");
       if (b.dataset.a === "watch") startWatch(b.dataset.id, b.dataset.n).catch((e) => say("Couldn't open their stream: " + (e && e.message ? e.message : e)));
+      if (b.dataset.a === "watchcam") startWatch(b.dataset.id, b.dataset.n, "camera").catch((e) => say("Couldn't open their camera: " + (e && e.message ? e.message : e)));
+      offerClick(b.dataset.a);
     }));
   }
 
@@ -178,10 +215,15 @@
     // (left the call: everything from that bridge stops. A bridge that didn't answer this time isn't "left".)
     const left = (o) => { const a = o && answers.find((x) => x.src.id === o.src.id); return !!(a && a.r.ok && a.r.data && !a.r.data.inCall); };
     if (left(pub)) stopPublish();
+    if (left(cam)) stopCamera();
     if (left(watch)) stopWatch();
+    lookForOffer(answers);
     draw();
   }
-  setInterval(() => { if (document.visibilityState === "visible" || pub || watch) refresh(); }, 15000);
+  // (every 15 seconds while the window is open; every 30 while BelleCord sits in the tray, so it still notices you
+  //  going live in the real Discord app with Belle in the call)
+  let tick15 = 0;
+  setInterval(() => { tick15++; if (document.visibilityState === "visible" || pub || cam || watch || tick15 % 2 === 0) refresh(); }, 15000);
   setTimeout(refresh, 5000);
 
   async function checkIn(o) {
@@ -211,7 +253,7 @@
     let ms = null, room = null, opened = null;
     try {
       const L = await loadLk();
-      await host.share.arm(sourceId);
+      if (sourceId) await host.share.arm(sourceId); // (no source: you went live in the real Discord app, so you pick it here)
       // (with its sound now: before, Fluxer got the picture only. The app's own sound, like the Discord call, is left out
       //  where Windows allows it, so people on Fluxer don't hear the call twice.)
       ms = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: { restrictOwnAudio: true, suppressLocalAudioPlayback: false, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).catch(() => navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false }));
@@ -226,6 +268,7 @@
       const sound = ms.getAudioTracks()[0];
       if (sound) await room.localParticipant.publishTrack(sound, { source: L.Track.Source.ScreenShareAudio, name: "screen-audio", dtx: false, red: false, audioPreset: { maxBitrate: 128000 } }).catch(() => {});
       pub = { room, track, stream: ms, connectionId: opened.connectionId, src };
+      offer = null;
       pub.timer = keepAlive(pub);
       if (opened.as === "bridge") say("Your stream is on Fluxer too, as the bridge's bot (you don't have a mirror there).", 9000);
       track.addEventListener("ended", () => stopPublish());
@@ -249,12 +292,13 @@
     if (why) say(why); else draw();
   }
   if (host.share) {
-    host.share.onShare((d) => { if (d && d.side === "discord" && d.sourceId) startPublish(d.sourceId, typeof d.toFluxer === "boolean" ? d.toFluxer : undefined); });
+    host.share.onShare((d) => { if (d && d.side === "discord" && d.sourceId) { lastShare = { id: d.sourceId, at: Date.now() }; startPublish(d.sourceId, typeof d.toFluxer === "boolean" ? d.toFluxer : undefined); } });
     host.share.onState((what) => { if (what === "ended") stopPublish(); });
   }
 
   // ---------------------------------------------------------------- watching a Fluxer stream
-  async function startWatch(identity, name) {
+  async function startWatch(identity, name, kind) {
+    kind = kind === "camera" ? "camera" : "screen";
     if (watch) stopWatch();
     const L = await loadLk();
     const src = active && active.src;
@@ -265,7 +309,7 @@
     box.id = "bcbw";
     box.setAttribute("role", "dialog");
     box.setAttribute("aria-label", name + "'s stream");
-    box.innerHTML = '<div class="hd"><span class="n">📺 ' + esc(name) + ' <span style="opacity:.6">on Fluxer</span></span><input type="range" min="0" max="100" value="80" aria-label="Stream volume" title="Volume"><button data-f title="Fullscreen" aria-label="Fullscreen">⛶</button><button data-c title="Close" aria-label="Close the stream">✕</button></div><video autoplay playsinline muted></video><div class="msg">Connecting...</div>';
+    box.innerHTML = '<div class="hd"><span class="n">' + (kind === "camera" ? "📷 " : "📺 ") + esc(name) + ' <span style="opacity:.6">on Fluxer</span></span><input type="range" min="0" max="100" value="80" aria-label="Stream volume" title="Volume"><button data-f title="Fullscreen" aria-label="Fullscreen">⛶</button><button data-c title="Close" aria-label="Close the stream">✕</button></div><video autoplay playsinline muted></video><div class="msg">Connecting...</div>';
     document.body.appendChild(box);
     const video = box.querySelector("video"), msg = box.querySelector(".msg"), vol = box.querySelector("input");
     const audios = [];
@@ -282,8 +326,8 @@
       addEventListener("pointermove", move); addEventListener("pointerup", up);
     });
     const room = new L.Room({ adaptiveStream: true, dynacast: false });
-    const isScreen = (p) => p && (p.source === L.Track.Source.ScreenShare || p.source === L.Track.Source.ScreenShareAudio);
-    watch = { room, connectionId: r.data.connectionId, src, identity, name, box };
+    const isScreen = (p) => p && (kind === "camera" ? p.source === L.Track.Source.Camera : p.source === L.Track.Source.ScreenShare || p.source === L.Track.Source.ScreenShareAudio);
+    watch = { room, connectionId: r.data.connectionId, src, identity, name, box, kind };
     watch.timer = keepAlive(watch);
     room.on(L.RoomEvent.TrackSubscribed, (track, p, participant) => {
       if (participant.identity !== identity) return;
@@ -291,16 +335,17 @@
       else if (track.kind === "audio") { const a = track.attach(); a.volume = Number(vol.value) / 100; audios.push(a); box.appendChild(a); }
     });
     room.on(L.RoomEvent.TrackPublished, (p, participant) => { if (participant.identity === identity && isScreen(p)) p.setSubscribed(true); });
-    room.on(L.RoomEvent.TrackUnpublished, (p, participant) => { if (participant.identity === identity && p.source === L.Track.Source.ScreenShare) stopWatch(name + " stopped streaming."); });
+    room.on(L.RoomEvent.TrackUnpublished, (p, participant) => { if (participant.identity === identity && p.source === (kind === "camera" ? L.Track.Source.Camera : L.Track.Source.ScreenShare)) stopWatch(name + (kind === "camera" ? " turned their camera off." : " stopped streaming.")); });
     room.on(L.RoomEvent.ParticipantDisconnected, (participant) => { if (participant.identity === identity) stopWatch(name + " left the call."); });
     room.on(L.RoomEvent.Disconnected, () => { if (watch && watch.room === room) stopWatch(); });
     try {
       await room.connect(r.data.url, r.data.token, { autoSubscribe: false });
       const p = room.remoteParticipants.get(identity) || [...room.remoteParticipants.values()].find((x) => x.identity === identity);
-      if (!p) return stopWatch(name + " isn't streaming any more.");
+      const gone = name + (kind === "camera" ? "'s camera is off now." : " isn't streaming any more.");
+      if (!p) return stopWatch(gone);
       let any = false;
       for (const pp of p.trackPublications.values()) if (isScreen(pp)) { pp.setSubscribed(true); any = true; }
-      if (!any) return stopWatch(name + " isn't streaming any more.");
+      if (!any) return stopWatch(gone);
       draw();
     } catch (e) { stopWatch("Couldn't open " + name + "'s stream: " + (e && e.message ? e.message : e)); }
   }
@@ -314,7 +359,111 @@
     ask(w.src, "close", { connectionId: w.connectionId });
     if (why) say(why); else draw();
   }
-  addEventListener("beforeunload", () => { stopPublish(); stopWatch(); });
+  addEventListener("beforeunload", () => { stopPublish(); stopCamera(); stopWatch(); });
+
+  // ---------------------------------------------------------------- (Update 21) offering it to Belle, and the one-tap proof
+  let lastShare = null; // (the screen you last went live with here, so "Show it" doesn't have to ask again)
+  function lookForOffer(answers) {
+    const h = answers.find((a) => a.src.id === "hub");
+    const d = h && h.r && h.r.data;
+    const here = !!(d && d.inCall && d.belleHere);
+    const live = here && !!d.liveOnDiscord, camOn = here && !!d.cameraOnDiscord;
+    if (!(d && d.liveOnDiscord)) dismissed.screen = told.screen = false;
+    if (!(d && d.cameraOnDiscord)) dismissed.camera = told.camera = false;
+    let want = null;
+    if (on("offerBelle")) {
+      if (live && !pub && !d.publishing && !dismissed.screen) want = "screen";
+      else if (camOn && !cam && !d.cameraPublishing && !dismissed.camera) want = "camera";
+    }
+    offer = want ? { what: want } : null;
+    // (BelleCord isn't in front: one quiet notification per time you go live)
+    if (want && !told[want] && (document.visibilityState !== "visible" || !document.hasFocus())) {
+      told[want] = true;
+      try { host.notifyClick ? host.notifyClick("Belle's in your call", want === "camera" ? "Show her your camera too? Click to open BelleCord." : "Show her your stream too? Click to open BelleCord.", "offer") : host.notify && host.notify("Belle's in your call", "Open BelleCord to show her your " + (want === "camera" ? "camera" : "stream") + " too."); } catch (e) {}
+    }
+  }
+  function offerClick(a) {
+    if (a === "nooffer") { if (offer) dismissed[offer.what] = true; offer = null; draw(); }
+    if (a === "noverify") { verifying = null; draw(); }
+    if (a === "offer" || a === "offercam") {
+      const go = a === "offer" ? () => startPublish(lastShare && Date.now() - lastShare.at < 6 * 3600000 ? lastShare.id : null, true) : () => startCamera();
+      offer = null; draw();
+      const h = lastAnswers.find((x) => x.src.id === "hub");
+      const needProof = !prefs.hubKey && h && h.r && h.r.status === 401;
+      if (needProof) verify(go); else go();
+    }
+  }
+  async function verify(then) {
+    if (verifying) return;
+    const r = await host.hub("POST", "/v1/verify", { ids: { discord: myDiscordId() }, why: "stream" }).catch(() => null);
+    if (!r || !r.ok || !r.data || !r.data.token) return say((r && r.data && r.data.error) || (r && r.error) || "Belle's hub isn't answering right now. Try again in a bit.", 10000);
+    verifying = { token: r.data.token, pin: r.data.pin, at: Date.now(), then };
+    draw();
+    const poll = async () => {
+      const v = verifying;
+      if (!v) return;
+      if (Date.now() - v.at > 10 * 60000) { verifying = null; return say("That ran out. Click Show it again to get a new one."); }
+      const p = await host.hub("POST", "/v1/verify/poll", { token: v.token }).catch(() => null);
+      if (verifying !== v) return;
+      if (p && p.ok && p.data && p.data.key) {
+        verifying = null;
+        await host.setPrefs?.({ hubKey: p.data.key });
+        try { dispatchEvent(new CustomEvent("bc-hubkey", { detail: p.data.key })); } catch (e) {}
+        await getPrefs();
+        say("That's you. You won't be asked again.", 6000);
+        await refresh();
+        if (v.then) v.then();
+        return;
+      }
+      if (p && p.status === 404) { verifying = null; return say("That one ran out or was turned down. Click Show it to try again."); }
+      setTimeout(poll, 2500);
+    };
+    setTimeout(poll, 2500);
+  }
+  if (host.onNotice) host.onNotice((what) => { if (what === "click:offer") { refresh(); } });
+
+  // ---------------------------------------------------------------- your camera, on Fluxer too
+  async function startCamera() {
+    await getPrefs();
+    if (cam) return;
+    if (!active) await refresh();
+    const src = active && active.src;
+    if (!src) return say("You're not in Belle's bridged call right now.");
+    let ms = null, room = null, opened = null;
+    try {
+      const L = await loadLk();
+      ms = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+      const track = ms.getVideoTracks()[0];
+      if (!track) throw new Error("no camera found");
+      const r = await ask(src, "open", { purpose: "camera" });
+      if (!r.ok) throw new Error((r.data && r.data.error) || r.error || "the bridge didn't answer");
+      opened = r.data;
+      room = new L.Room({ dynacast: true });
+      await room.connect(opened.url, opened.token, { autoSubscribe: false });
+      await room.localParticipant.publishTrack(track, { source: L.Track.Source.Camera, name: "camera", simulcast: false, videoEncoding: { maxBitrate: 1500000, maxFramerate: 30 } });
+      cam = { room, track, stream: ms, connectionId: opened.connectionId, src };
+      cam.timer = setInterval(async () => { const c = cam; if (!c) return; const p = await ask(c.src, "ping", { connectionId: c.connectionId }); if (!p.ok || (p.data && p.data.ok === false)) stopCamera("Your camera on Fluxer stopped (the bridged call changed)."); }, 30000);
+      track.addEventListener("ended", () => stopCamera());
+      room.on(L.RoomEvent.Disconnected, () => { if (cam && cam.room === room) stopCamera("Your camera on Fluxer stopped (Fluxer hung up)."); });
+      say("Your camera is on Fluxer too. Turning it off on Discord doesn't stop this one: use Stop.", 9000);
+      draw();
+    } catch (e) {
+      try { ms && ms.getTracks().forEach((t) => t.stop()); } catch (x) {}
+      try { room && room.disconnect(); } catch (x) {}
+      if (opened) ask(src, "close", { connectionId: opened.connectionId });
+      say("Couldn't show your camera on Fluxer: " + (e && e.message ? e.message : e));
+    }
+  }
+  function stopCamera(why) {
+    const c = cam;
+    if (!c) return;
+    cam = null;
+    clearInterval(c.timer);
+    try { c.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    try { c.room.disconnect(); } catch (e) {}
+    ask(c.src, "close", { connectionId: c.connectionId });
+    if (why) say(why); else draw();
+  }
 
   // ---------------------------------------------------------------- a friend's bridge: the link its stream command DMs you
   // (clicking it anywhere in BelleCord lands here; the key is after the #, and it only works for your Discord account)

@@ -1212,6 +1212,18 @@
 
   // app: tray + updates
   $("opt-tray").onchange = (e) => save({ tray: e.target.checked });
+  // (Update 21) start with Windows, quietly in the tray (on by default; told once)
+  if (host.autostart) host.autostart.get().then((a) => {
+    if (!a || !a.can) return;
+    const lab = document.createElement("label"); lab.className = "keep";
+    lab.innerHTML = '<input type="checkbox" id="opt-auto"> Start BelleCord with Windows (it waits in the tray)';
+    $("opt-tray").closest("label").after(lab);
+    const box = $("opt-auto"); box.checked = !!a.on;
+    box.onchange = async () => { const r = await host.autostart.set(box.checked).catch(() => null); box.checked = !!(r && r.on); await save({ autoStart: box.checked }); };
+    if (a.on && !P("autoStartTold")) { save({ autoStartTold: true }); setTimeout(() => toast("BelleCord starts with Windows now, quietly in the tray. Turn it off in Dashboard > App.", 7000), 9000); }
+  }).catch(() => {});
+  // (Update 21) the stream bridge proved it's you with one tap: game badges know too, without asking again
+  window.addEventListener("bc-hubkey", (e) => { const k = String((e && e.detail) || ""); if (k && !P("hubKey")) { prefs.hubKey = k; try { paintBadges(); } catch (x) {} } });
   const flip = () => { if (P("flip")) document.body.setAttribute("data-flip", ""); else document.body.removeAttribute("data-flip"); };
   $("opt-flip").onchange = (e) => { save({ flip: e.target.checked }); flip(); };
   // rail swap button = 'Discord first' setting

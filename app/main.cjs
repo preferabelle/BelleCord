@@ -50,6 +50,7 @@ app.setAppUserModelId(NAME);
 if (!app.requestSingleInstanceLock()) { app.quit(); return; }
 
 let win = null;
+const startHidden = process.argv.includes("--hidden");
 app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 
 // prefs: json in userData
@@ -150,6 +151,42 @@ ipcMain.handle("img:set", (e, key, data) => {
   } catch { return false; }
 });
 ipcMain.handle("notify", (e, { title, body }) => { try { if (Notification.isSupported()) new Notification({ title: String(title || NAME), body: String(body || ""), ...withIcon() }).show(); } catch {} });
+// (Update 21) a notification that opens BelleCord when clicked, and tells the page which one it was
+ipcMain.handle("notify:click", (e, { title, body, tag }) => {
+  try {
+    if (!Notification.isSupported()) return false;
+    const n = new Notification({ title: String(title || NAME).slice(0, 80), body: String(body || "").slice(0, 200), silent: true, ...withIcon() });
+    n.on("click", () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); try { win.webContents.send("notice", "click:" + String(tag || "").replace(/[^a-z0-9-]/gi, "").slice(0, 20)); } catch {} } });
+    n.show();
+    return true;
+  } catch { return false; }
+});
+// (Update 21) starting with Windows, quietly in the tray (so it can notice streams while you use the Discord app)
+const AUTO_OK = process.platform === "win32";
+const autoArgs = () => [path.join(__dirname, ".."), "--hidden"];
+function autoApply(on) { if (!AUTO_OK) return; try { app.setLoginItemSettings({ openAtLogin: !!on, path: process.execPath, args: autoArgs(), name: NAME }); } catch {} }
+const autoOn = () => readPrefs().autoStart !== false;
+ipcMain.handle("autostart:get", () => ({ can: AUTO_OK, on: AUTO_OK && autoOn() }));
+ipcMain.handle("autostart:set", (e, on) => { writePrefs({ autoStart: !!on }); autoApply(!!on); return { can: AUTO_OK, on: AUTO_OK && !!on }; });
+// (Update 21) Belle's own profile pictures (decorations, effects, nameplates she uploaded), through the hub
+const artCache = new Map();
+ipcMain.handle("hub:art", async (e, file) => {
+  const f = String(file || "");
+  if (!/^[a-z]{1,10}-[a-f0-9]{16}\.(png|gif|webp|jpg|apng)$/i.test(f)) return null;
+  if (artCache.has(f)) return artCache.get(f);
+  const base = hubAddress() || MY_HUB;
+  try {
+    const r = await fetch(base + "/v1/art/" + f, { headers: { "ngrok-skip-browser-warning": "1", "user-agent": "BelleCord" }, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 7 * 1024 * 1024) return null;
+    const type = /\.gif$/i.test(f) ? "image/gif" : /\.webp$/i.test(f) ? "image/webp" : /\.jpg$/i.test(f) ? "image/jpeg" : "image/png";
+    const url = "data:" + type + ";base64," + buf.toString("base64");
+    if (artCache.size > 40) artCache.clear();
+    artCache.set(f, url);
+    return url;
+  } catch { return null; }
+});
 // BridgeCord (bridgebot.cjs)
 try { require("./bridgebot.cjs")({ app, ipcMain, net, shell }); } catch (e) { console.error("BridgeCord part didn't load:", e); }
 ipcMain.handle("open-external", (e, url) => { if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url)); });
@@ -445,7 +482,8 @@ function open() {
     if (!ok) e.preventDefault();
   });
   win.webContents.on("will-navigate", (e) => e.preventDefault()); // shell never navigates
-  win.once("ready-to-show", () => win.show());
+  // (started by Windows at sign-in: it waits in the tray instead of popping up)
+  win.once("ready-to-show", () => { if (startHidden && tray) return; win.show(); });
   // mouse back/forward buttons
   win.on("app-command", (e, cmd) => { if (cmd === "browser-backward" || cmd === "browser-forward") win.webContents.send("nav", cmd === "browser-backward" ? "back" : "forward"); });
   win.on("swipe", (e, dir) => { if (dir === "left" || dir === "right") win.webContents.send("nav", dir === "right" ? "back" : "forward"); }); // mac trackpad swipe
@@ -522,6 +560,8 @@ app.whenReady().then(async () => {
   for (const p of allParts()) setUpPart(p);
   makeTray();
   open();
+  // (on by default, Windows only; Dashboard > App has the switch. The shell tells you once.)
+  autoApply(autoOn());
 });
 // flush cookies periodically and before quit
 function flushAll() { for (const p of allParts()) { try { const ses = session.fromPartition(p); ses.flushStorageData(); ses.cookies.flushStore().catch(() => {}); } catch {} } }
