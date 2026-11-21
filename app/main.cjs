@@ -461,7 +461,7 @@ function open() {
     title: NAME, backgroundColor: "#1e1f22", autoHideMenuBar: true, show: false,
     titleBarStyle: "hidden", ...(MAC ? { trafficLightPosition: { x: 12, y: 9 } } : { titleBarOverlay: { color: "#1e1f22", symbolColor: "#b5bac1", height: 32 } }),
     ...withIcon(),
-    webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true, spellcheck: true, preload: path.join(__dirname, "preload.cjs") },
+    webPreferences: { webviewTag: true, contextIsolation: true, sandbox: true, spellcheck: true, backgroundThrottling: false, preload: path.join(__dirname, "preload.cjs") },
   });
   if (p?.max) win.maximize();
   // what a taskbar pin made from this window opens: BelleCord, not plain Electron (the "electron.exe path-to-app"

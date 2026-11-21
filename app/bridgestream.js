@@ -218,7 +218,28 @@
     if (left(cam)) stopCamera();
     if (left(watch)) stopWatch();
     lookForOffer(answers);
+    tellLive();
     draw();
+  }
+  // (someone in your call went live, or turned their camera on: one notification each time, so you know even with
+  //  BelleCord sitting in the tray. Clicking it opens BelleCord, where the Watch button is.)
+  let seenLive = null;
+  function tellLive() {
+    const now = new Map();
+    if (info && info.inCall && on("watchFluxer")) {
+      for (const x of info.streams || []) now.set("s:" + x.identity, { name: x.name, cam: false });
+      for (const x of info.cameras || []) now.set("c:" + x.identity, { name: x.name, cam: true });
+    }
+    const first = seenLive === null;
+    const before = seenLive || new Map();
+    seenLive = now;
+    if (first) return; // (what was already going when BelleCord started isn't news)
+    for (const [k, v] of now) {
+      if (before.has(k)) continue;
+      if (document.visibilityState === "visible" && document.hasFocus()) continue;
+      const who = v.name || "Someone";
+      try { host.notifyClick ? host.notifyClick(v.cam ? who + " turned their camera on" : who + " is live!", "In your call. Click to open BelleCord and watch.", "live") : host.notify && host.notify(v.cam ? who + " turned their camera on" : who + " is live!", "In your call. Open BelleCord to watch."); } catch (e) {}
+    }
   }
   // (every 15 seconds while the window is open; every 30 while BelleCord sits in the tray, so it still notices you
   //  going live in the real Discord app with Belle in the call)

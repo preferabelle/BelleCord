@@ -2,7 +2,7 @@ window.bcWhatsNew = [
   {
     "n": 21,
     "title": "BelleCord Update 21",
-    "notes": "- Streams across the bridge work right away now, with no setup. This also fixes streams not showing up for some people.\n- Cameras in bridged calls: when someone's camera is on in the Fluxer call you get a Watch button for it on Discord, and your own camera can show on Fluxer too.\n- BelleCord starts with Windows now and waits quietly in the tray, like other apps. To stop that, turn it off in Windows Settings > Apps > Startup.\n- BelleCord badges sit on their own line under the name on Discord profiles."
+    "notes": "- Streams across the bridge work right away now, with no setup. This also fixes streams not showing up for some people.\n- Cameras in bridged calls: when someone's camera is on in the Fluxer call you get a Watch button for it on Discord, and your own camera can show on Fluxer too.\n- BelleCord starts with Windows now and waits quietly in the tray, like other apps. To stop that, turn it off in Windows Settings > Apps > Startup.\n- While it waits in the tray it keeps working, and tells you when someone in your call goes live or turns their camera on. Click the notification to watch.\n- BelleCord badges sit on their own line under the name on Discord profiles."
   },
   {
     "n": 20,
